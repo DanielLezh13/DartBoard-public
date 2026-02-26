@@ -1,96 +1,104 @@
 # DartBoard
 
-A chat + memory workspace for long-running AI workflows, with archive import/search and session-scoped memory injection.
+AI chat + memory workspace for long-running workflows, with archive search, foldered sessions, and Stripe-powered Plus billing.
 
-## Live
+## Live Demo
 
 - App: `https://dartboard-production-71e8.up.railway.app`
+- Video walkthrough: `TODO: add YouTube/Loom link`
 
-## Product Surfaces
+## Screenshots
 
-- **Chat (`/chat`)**: streaming chat, folders, mode switching, focus mode, image upload.
-- **Memories**: create/edit memories, attach/detach/pin to a session, token-budget-aware injection.
-- **Archive (`/archive`)**: import ChatGPT exports (JSON/parquet), query/filter, save results to memory.
-- **Auth/Billing**: Supabase auth + Stripe plan sync/checkouts.
+> Replace these with your real images after recording/capturing.
 
-## Architecture Snapshot
+![Chat Workspace](public/readme/chat-workspace.png)
+![Memory Vault + Drag to Chat](public/readme/memory-drag-injection.png)
+![Archive Search](public/readme/archive-search.png)
 
-- **Framework**: Next.js App Router + TypeScript + Tailwind.
-- **Primary storage**: local SQLite (`better-sqlite3`) via [`lib/db.ts`](/Users/daniel/dev/DartBoard-main/lib/db.ts).
-- **Auth**: Supabase session + server scope checks.
-- **LLM**: OpenAI chat completions (plus optional web-grounding paths).
-- **API shape**: route handlers under [`app/api`](/Users/daniel/dev/DartBoard-main/app/api).
-- **Memory pipeline**: session attachments + pinned injection through the boot sequence.
+## What DartBoard Can Do
 
-## Current Deployment Constraints
+- Create and organize chats in folders.
+- Use the right-side Memory workspace to create, edit, organize, and reuse memories while chatting.
+- Drag memories directly into chat for context injection.
+- Attach, detach, and pin session-specific memories.
+- Import and search ChatGPT archives.
+- Switch modes/focus behavior during chat sessions.
+- Authenticate users with Supabase.
+- Upgrade to Plus using Stripe checkout + webhook plan sync.
 
-- Intended for **single-server deployment** in this phase.
-- SQLite is intentionally retained for soft launch.
-- Middleware rate limiting is in-memory (single-node baseline).
+## How It Works (High Level)
 
-## Launch Safety Posture (Current)
+- **Frontend**: Next.js App Router + React + TypeScript + Tailwind.
+- **Auth**: Supabase session and scope checks.
+- **Storage**: SQLite (`better-sqlite3`) for soft-launch single-node deployment.
+- **LLM**: OpenAI chat completions with token-budget-aware memory injection.
+- **Billing**: Stripe checkout, billing portal, and webhook-driven plan updates.
 
-- Markdown rendering hardened (no raw HTML execution in chat/archive renderers).
-- Uploads validated by magic bytes (not client MIME/type).
-- Archive search now has strict query-shape guards and bounded pagination.
-- Expensive endpoints have auth + throttling gates.
-
-## Environment Variables
-
-Required for core app:
-
-- `OPENAI_API_KEY`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-
-Common optional variables:
-
-- `NEXT_PUBLIC_BASE_URL` (absolute app base for local-upload URL normalization)
-- `DARTZ_MAX_OUTPUT_TOKENS` (server-side output token override)
-
-Billing-only:
-
-- `STRIPE_SECRET_KEY`
-- `STRIPE_PLUS_PRICE_ID`
-- `STRIPE_WEBHOOK_SECRET`
-
-Use the provided template:
-
-```bash
-cp .env.example .env.local
-```
-
-## Getting Started
+## Local Setup
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
 Open `http://localhost:3000`.
 
-## Production Deploy Notes
+## Environment Variables
 
-- Railway is the current deploy target for soft launch.
-- Stripe uses environment variables only; no secrets are committed to source.
-- For billing webhooks, configure endpoint:
-  - `https://<your-domain>/api/billing/webhook`
-  - events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
+Core:
+
+- `OPENAI_API_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Billing:
+
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PLUS_PRICE_ID`
+- `STRIPE_WEBHOOK_SECRET`
+
+Optional:
+
+- `NEXT_PUBLIC_BASE_URL`
+- `DARTZ_MAX_OUTPUT_TOKENS`
+
+## Stripe Webhook Events
+
+Configure endpoint:
+
+- `https://<your-domain>/api/billing/webhook`
+
+Subscribe to:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
 
 ## Scripts
 
-- `npm run dev` - local dev server
-- `npm run lint` - Next.js ESLint
+- `npm run dev` - local development server
 - `npm run typecheck` - TypeScript checks
+- `npm run lint` - ESLint checks
 - `npm run build` - production build
 
-## Documentation
+## Safety and Constraints
 
-- API route map: [docs/API_ROUTE_MAP.md](/Users/daniel/dev/DartBoard-main/docs/API_ROUTE_MAP.md)
-- Launch checklist: [docs/LAUNCH_CHECKLIST.md](/Users/daniel/dev/DartBoard-main/docs/LAUNCH_CHECKLIST.md)
-- Manual QA script: [docs/MANUAL_QA_SCRIPT.md](/Users/daniel/dev/DartBoard-main/docs/MANUAL_QA_SCRIPT.md)
+- Markdown rendering is hardened (no raw HTML execution).
+- Uploads are validated by magic bytes.
+- Search and expensive endpoints have auth/throttling guards.
+- Current architecture is intentionally single-node for soft launch.
 
-## Known Constraints
+## Roadmap
 
-- Single-node architecture in this phase (SQLite + in-memory rate limits).
-- Not yet tuned for multi-instance horizontal scaling.
+- Multi-instance-safe persistence/rate limiting.
+- Additional memory tooling and retrieval UX.
+- Expanded analytics and onboarding polish.
+
+## Docs
+
+- [API Route Map](docs/API_ROUTE_MAP.md)
+- [Launch Checklist](docs/LAUNCH_CHECKLIST.md)
+- [Manual QA Script](docs/MANUAL_QA_SCRIPT.md)
