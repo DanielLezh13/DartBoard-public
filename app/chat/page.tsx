@@ -2291,7 +2291,7 @@ export default function ChatPage() {
     handleDeleteMemoryFolderAndMemories,
 	    handleCreateMemory,
 	    getAllMemoryFolderNames,
-	    isFolderSwitching,
+	    isFolderSwitching: isMemoryFolderSwitching,
 	    suppressMemoryHover,
 	    hasLoadedMemoryFoldersOnce,
 	    hydratedFromCacheMemoryFolders,
@@ -4401,6 +4401,16 @@ export default function ChatPage() {
       return;
     }
 
+    // If we're already on landing and only a memory overlay is open,
+    // behave like "Back to chat": close overlay without resetting landing animation state.
+    if (isLandingRef.current && activeSessionIdRef.current == null && memoryOverlayOpenRef.current) {
+      setMemoryOverlayOpen(false);
+      setSelectedMemoryId(null);
+      setDraftMemory(null);
+      pendingSessionSwitchRef.current = false;
+      return;
+    }
+
     suppressRestoreLastSessionRef.current = true;
 
     // "New Chat" should be a UI reset to the landing scene.
@@ -4438,7 +4448,10 @@ export default function ChatPage() {
       setSelectedMemoryId(null);
       setDraftMemory(null);
     }
-    pendingSessionSwitchRef.current = true;
+    // Only mark pending session switch when we're leaving an actual active session.
+    // If we're already on landing and only closing a memory overlay, this must stay false
+    // or landing/memory transition effects can get stuck in a "switch pending" state.
+    pendingSessionSwitchRef.current = activeSessionIdRef.current != null;
     // We are explicitly going to landing, so landing must be visible.
     setSuppressLanding(false);
     // Landing injected memories are ephemeral: always reset on "New Chat".
@@ -5502,7 +5515,7 @@ export default function ChatPage() {
       activeSessionId={activeSessionId}
       selectedFolderId={selectedFolderId}
       activeId={activeDragId}
-      isFolderSwitching={isFolderSwitching}
+      isFolderSwitching={false}
       onSelectSession={handleSelectSession}
       onRenameSession={handleRenameSession}
       onDeleteSession={handleDeleteSession}
@@ -5518,7 +5531,6 @@ export default function ChatPage() {
     activeSessionId,
     selectedFolderId,
     activeDragId,
-    isFolderSwitching,
     handleSelectSession,
     handleRenameSession,
     handleDeleteSession,
@@ -5717,7 +5729,7 @@ export default function ChatPage() {
         scrollLockReason={scrollLockReason}
         revealMessageIdRef={revealMessageIdRef}
       memoryLoading={memoryLoading}
-      isFolderSwitching={isFolderSwitching}
+      isFolderSwitching={isMemoryFolderSwitching}
       toggleAttachMemory={toggleAttachMemory}
       pendingAttachedMemoryIds={landingAttachedMemoryIds}
       memoryUsageRatio={memoryUsageRatio}
