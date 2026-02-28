@@ -2,7 +2,7 @@
 
 Stateful AI workspace for chat, memory, and archive-driven context.
 
-Live app: `https://dartboard-production-71e8.up.railway.app`
+Live app: https://dartboard-production-71e8.up.railway.app
 
 ## 10-Second Summary
 
