@@ -3503,12 +3503,26 @@ export default function ChatPage() {
   // Load mode when session or sessions change
   // Only sync mode from session if there's an active session
   // On landing (activeSessionId === null), mode state is user-controlled
+  const lastModeSyncedSessionIdRef = useRef<number | null>(null);
   useEffect(() => {
-    if (activeSessionId && sessions.length > 0) {
-      const session = sessions.find((s) => s.id === activeSessionId);
-      if (session) {
-        setMode((session.mode as DartzModeId) || "tactical");
-      }
+    if (!activeSessionId) {
+      lastModeSyncedSessionIdRef.current = null;
+      return;
+    }
+    if (sessions.length === 0) return;
+
+    const session = sessions.find((s) => s.id === activeSessionId);
+    if (!session) return;
+
+    const sessionModeCandidate = typeof session.mode === "string" ? session.mode : "";
+    const isKnownMode = DARTZ_MODES.some((m) => m.id === sessionModeCandidate);
+    const sessionMode = (isKnownMode ? sessionModeCandidate : "tactical") as DartzModeId;
+
+    // Sync mode when switching sessions. For the same active session, the local composer state
+    // is the source of truth to avoid mode "snap-backs" during background session reloads.
+    if (lastModeSyncedSessionIdRef.current !== activeSessionId) {
+      setMode(sessionMode);
+      lastModeSyncedSessionIdRef.current = activeSessionId;
     }
   }, [activeSessionId, sessions]);
 
@@ -3778,34 +3792,40 @@ export default function ChatPage() {
       console.warn("Cannot update mode: no active session");
       return;
     }
+    const sessionId = activeSessionId;
+
+    // Keep local session state in sync immediately (prevents UI snap-back while patch is in flight).
+    setSessions((prev) =>
+      prev.map((s: any) =>
+        s.id === sessionId ? { ...s, mode: newMode } : s
+      )
+    );
 
     // Guest preview sessions are local-only: never write mode to server.
     if (scope?.kind === "guest") {
-      setSessions((prev) =>
-        prev.map((s: any) =>
-          s.id === activeSessionId ? { ...s, mode: newMode } : s
-        )
-      );
       return;
     }
 
     try {
-      await fetch("/api/sessions", {
+      const res = await fetch("/api/sessions", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: scope ? getHeadersForScope(scope) : { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: activeSessionId,
+          id: sessionId,
           mode: newMode,
         }),
       });
-      // Reload sessions to get updated mode
-      await loadSessions();
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
     } catch (error) {
       console.error("Error updating session mode:", error);
     }
   };
 
   const handleModeChange = (newMode: DartzModeId) => {
+    if (isSending) return;
+    if (newMode === mode) return;
     setMode(newMode);
     // Only update session mode if there's an active session
     // On landing (no activeSessionId), mode state is the source of truth
@@ -5176,6 +5196,9 @@ export default function ChatPage() {
       
       setTimeout(() => {
         devLog('[handleSend] Adding messages after', messageDelay, 'ms delay');
+        // Force a pre-paint bottom snap on optimistic send commit.
+        // This prevents "detached" states when the send rows mount after the initial pre-send pin.
+        pendingCommitScrollToBottomRef.current = true;
         setMessagesAndMarkLoaded(newMessages);
       }, messageDelay);
       

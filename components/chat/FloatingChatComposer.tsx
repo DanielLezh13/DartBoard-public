@@ -886,6 +886,7 @@ export function FloatingChatComposer({
       : showSessionFullUI
       ? Boolean(onGenerateNewChat)
       : !isSending && value.trim().length > 0);
+  const modeToggleDisabled = chatFullState === "full" || isSearchMode || isSending;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (effectiveDisabled) return;
@@ -901,6 +902,7 @@ export function FloatingChatComposer({
   };
 
   const handleModeClick = () => {
+    if (modeToggleDisabled) return;
     // Cycle through all modes
     const currentIndex = DARTZ_MODES.findIndex((m) => m.id === mode);
     const nextIndex = (currentIndex + 1) % DARTZ_MODES.length;
@@ -1721,10 +1723,10 @@ export function FloatingChatComposer({
               {/* Mode section */}
               <div className="flex items-center">
                 <button
-                  onClick={chatFullState === "full" || isSearchMode ? undefined : handleModeClick}
-                  disabled={chatFullState === "full" || isSearchMode}
+                  onClick={modeToggleDisabled ? undefined : handleModeClick}
+                  disabled={modeToggleDisabled}
                   className={`w-[74px] h-7 inline-flex items-center justify-center rounded-full border transition-colors ${
-                    chatFullState === "full" || isSearchMode
+                    modeToggleDisabled
                       ? "border-gray-800 bg-gray-900 text-gray-600 cursor-not-allowed opacity-50"
                       : "border-blue-300/70 bg-gray-700 hover:bg-gray-600 text-gray-100 shadow-[0_0_6px_rgba(96,165,250,0.28)]"
                   }`}

@@ -655,8 +655,11 @@ export function useChatScroll(opts: { isSending: boolean; isSearching: boolean |
           c.scrollTop = followMaxScroll;
           return;
         }
-        
-        if (followDistToBottom > 180) return;
+
+        // While actively sending (or in the short post-reveal settle window), keep following even
+        // if we drift farther than the normal near-bottom threshold.
+        const allowFarFollow = isSendingRef.current || withinPostRevealSettle;
+        if (!allowFarFollow && followDistToBottom > 180) return;
 
         // Throttle RO-driven pins (layout can tick fast during transitions)
         const now = performance.now();
