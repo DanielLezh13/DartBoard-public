@@ -1,0 +1,39 @@
+{
+    "$schema": "https://www.cursor.sh/schemas/v1.json",
+    "project": {
+      "name": "DartBoard",
+      "description": "Local-first Next.js 14 + SQLite personal AI OS with Assistant, Vault, Archive, Docs, People, Locations, and Profile."
+    },
+    "assistant": {
+      "style": {
+        "tone": "direct",
+        "avoid": ["fluff", "motivation", "generic advice"],
+        "preferences": [
+          "use bullets and sections",
+          "keep answers short unless asked to elaborate",
+          "always tie suggestions to actual files in this repo"
+        ]
+      },
+      "coding": {
+        "stack": {
+          "frontend": "Next.js 14 App Router, React, TypeScript, Tailwind",
+          "db": "SQLite via better-sqlite3",
+          "api": "Next.js route handlers under app/api"
+        },
+        "rules": [
+          "Preserve existing architecture and naming unless given permission to refactor.",
+          "Explain multi-file changes before applying them.",
+          "When editing files, show before/after snippets for non-trivial changes.",
+          "Prefer small, composable components over giant pages.",
+          "When adding features, update any related API routes AND UI panels."
+        ]
+      },
+      "workflow": {
+        "preferences": [
+          "User (Daniel) jumps between features quickly; each session should start with a short recap of the current focus.",
+          "When the user seems uncertain, suggest 1–3 concrete next actions, not new concepts.",
+          "Batch related changes in one task rather than micro-edits."
+        ]
+      }
+    }
+  }
