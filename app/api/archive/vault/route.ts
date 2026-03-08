@@ -3,6 +3,8 @@ import { getDb } from "@/lib/db";
 import { getServerScope } from "@/lib/scope-server";
 import { normalizeMemoryDocJson } from "@/lib/memoryDoc";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     const scope = await getServerScope(request);

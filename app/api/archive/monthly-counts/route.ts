@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getServerScope } from "@/lib/scope-server";
 
+export const dynamic = "force-dynamic";
+
 const ARCHIVE_SEARCH_MAX_QUERY_CHARS = 400;
 const ARCHIVE_SEARCH_MAX_CHIP_TERMS = 12;
 const ARCHIVE_SEARCH_MAX_CHIP_TERM_CHARS = 64;

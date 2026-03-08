@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { existsSync } from "fs";
+import { writeFile } from "fs/promises";
 import { randomUUID } from "crypto";
 import { getServerScope } from "@/lib/scope-server";
 import { getDb } from "@/lib/db";
@@ -11,6 +9,15 @@ import {
   getScopePlanLimits,
   incrementDailyUsage,
 } from "@/lib/plan";
+import { enforceApiRateLimit } from "@/lib/rateLimit";
+import {
+  ensurePrivateUploadsDir,
+  getPrivateUploadPath,
+  getPrivateUploadUrl,
+  getUploadMimeType,
+} from "@/lib/uploads";
+
+export const dynamic = "force-dynamic";
 
 const MAGIC_SIGNATURES: { bytes: number[]; ext: string }[] = [
   { bytes: [0xFF, 0xD8, 0xFF], ext: "jpg" },
@@ -48,6 +55,15 @@ export async function POST(request: NextRequest) {
       );
     }
     const db = getDb();
+    const rateLimited = enforceApiRateLimit({
+      db,
+      request,
+      route: { routeKey: "/api/upload/image", limit: 10, windowMs: 10 * 60 * 1000 },
+      scope,
+    });
+    if (rateLimited) {
+      return rateLimited;
+    }
     const { limits } = getScopePlanLimits(db, scope);
 
     if (Number.isFinite(limits.maxImageUploadsPerDay)) {
@@ -94,24 +110,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = join(process.cwd(), "public", "uploads");
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
+    await ensurePrivateUploadsDir();
 
     // Use detected extension, not client-provided filename
     const filename = `${randomUUID()}.${detectedExt}`;
-    const filepath = join(uploadsDir, filename);
+    const filepath = getPrivateUploadPath(filename);
+    const mimeType = getUploadMimeType(filename) || file.type || "application/octet-stream";
 
     await writeFile(filepath, buffer);
+    db.prepare(
+      `INSERT INTO uploaded_images (stored_name, original_name, mime_type, size_bytes, user_id)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(filename, file.name || null, mimeType, buffer.byteLength, scope.userId);
 
-    // Return the public URL path
-    const publicUrl = `/uploads/${filename}`;
     incrementDailyUsage(db, scope.userId, "image_upload");
 
     return NextResponse.json({
-      url: publicUrl,
+      url: getPrivateUploadUrl(filename),
       filename: filename,
     });
   } catch (error) {

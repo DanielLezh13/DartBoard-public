@@ -31,8 +31,6 @@ export async function POST(request: NextRequest) {
     const results = wipeGuestDataByGuestId(db, guestId)
     const wipedCount = Object.values(results).reduce((sum, value) => sum + value, 0)
 
-    console.log('[WIPE GUEST] Guest data wiped for guest:', guestId, 'user:', user.id, 'count:', wipedCount)
-
     return NextResponse.json({ success: true, wiped: wipedCount > 0, results })
   } catch (error) {
     console.error('[WIPE GUEST] Error:', error)

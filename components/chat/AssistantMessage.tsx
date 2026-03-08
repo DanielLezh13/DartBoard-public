@@ -282,28 +282,6 @@ function AssistantMessageInner(props: AssistantMessageProps) {
   const settleOpacity = 1;
   const settleY = willNeverReveal ? 0 : (1 - (preRevealArming ? 0 : ease)) * 6;
 
-  // Temporary debug log
-  if (typeof window !== "undefined") {
-    // Avoid spam: log only for the preloaded/newest message path or active reveal
-    if (revealPreload || revealActive || typeof revealHeightPx === "number") {
-      console.log("[AM]", {
-        id: message?.id,
-        revealPreload,
-        revealActive,
-        revealHeightPx,
-        isMeasured,
-        fullH,
-        revealPx: typeof revealHeightPx === "number" ? revealHeightPx : null,
-        preRevealArming,
-        willNeverReveal,
-        shouldReveal,
-        revealH,
-        settleOpacity,
-        showTools,
-      });
-    }
-  }
-
   const copyRenderedMessage = async (e?: React.MouseEvent) => {
     const el = measuredRef.current;
 
@@ -361,10 +339,8 @@ function AssistantMessageInner(props: AssistantMessageProps) {
         sel?.removeAllRanges();
         document.body.removeChild(container);
 
-        console.log("[COPY DEBUG] nativeSelectionCopy", { ok });
         return ok;
-      } catch (e) {
-        console.log("[COPY DEBUG] nativeSelectionCopy threw", e);
+      } catch {
         return false;
       }
     };
@@ -378,9 +354,6 @@ function AssistantMessageInner(props: AssistantMessageProps) {
 
     // 1) Prefer *native* selection copy (best for Google Docs + Apple Notes)
     const ok = nativeSelectionCopy(html);
-    if (!ok) {
-      console.log("[COPY DEBUG] native selection copy failed; falling back to ClipboardItem/writeText");
-    }
 
     // 2) Also attempt ClipboardItem for modern targets (Notion, etc.)
     // This is best-effort; failures should not block.

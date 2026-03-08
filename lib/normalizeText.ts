@@ -16,26 +16,9 @@ import { stripExportArtifacts } from "@/lib/stripExportArtifacts";
  * - Trailing whitespace on lines
  * - Excessive blank lines (3+ → 2)
  */
-export function normalizeText(raw: unknown, debug = false): string {
+export function normalizeText(raw: unknown, _debug = false): string {
   // Handle null/undefined
   if (raw === null || raw === undefined) return "";
-
-  // Log input type and preview for debugging
-  if (debug) {
-    const type = typeof raw;
-    const isArray = Array.isArray(raw);
-    let preview: string;
-
-    if (Array.isArray(raw)) {
-      preview = `[Array(${raw.length})]`;
-    } else if (typeof raw === "string") {
-      preview = raw.length > 100 ? raw.slice(0, 100) + "..." : raw;
-    } else {
-      const str = JSON.stringify(raw);
-      preview = str ? (str.length > 100 ? str.slice(0, 100) + "..." : str) : "";
-    }
-    console.log(`[normalizeText] Input type: ${isArray ? "array" : type}, preview: ${preview}`);
-  }
 
   // Convert to string if needed
   let text: string;
@@ -70,10 +53,10 @@ export function normalizeText(raw: unknown, debug = false): string {
     const obj = raw as Record<string, unknown>;
 
     if (typeof obj.text === "string") {
-      return normalizeText(obj.text, debug);
+      return normalizeText(obj.text, false);
     }
     if (typeof obj.content === "string") {
-      return normalizeText(obj.content, debug);
+      return normalizeText(obj.content, false);
     }
 
     // Fallback: stringify and normalize
@@ -119,14 +102,6 @@ export function normalizeText(raw: unknown, debug = false): string {
 
   // Final trim (removes leading/trailing whitespace from entire string)
   text = text.trim();
-
-  if (debug && text !== (typeof raw === "string" ? raw : String(raw))) {
-    const preview = (str: string) => str.length > 200 ? str.slice(0, 200) + "..." : str;
-    console.log("=== NORMALIZE DEBUG ===");
-    console.log("BEFORE:", preview(typeof raw === "string" ? raw : String(raw)));
-    console.log("AFTER:", preview(text));
-    console.log("=======================");
-  }
 
   return text;
 }

@@ -7,13 +7,6 @@ import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
-const supabase = createClient();
-
-function logScopeSet(scope: Scope, reason: string) {
-  const id = scope.kind === "user" ? scope.userId : scope.guestId;
-  console.log("[SCOPE] set kind=" + scope.kind + " id=" + id + " reason=" + reason);
-}
-
 function sameScope(a: Scope | null, b: Scope): boolean {
   if (!a) return false;
   if (a.kind !== b.kind) return false;
@@ -28,22 +21,23 @@ export function useScope() {
   const scopeRef = useRef<Scope | null>(null);
 
   useEffect(() => {
-    const setScopeIfChanged = (next: Scope, reason: string) => {
+    const supabase = createClient();
+
+    const setScopeIfChanged = (next: Scope) => {
       if (sameScope(scopeRef.current, next)) return;
       scopeRef.current = next;
       setScope(next);
-      logScopeSet(next, reason);
     };
 
     // Initial scope
     const loadScope = async () => {
       try {
         const initialScope = await getClientScope();
-        setScopeIfChanged(initialScope, "init");
+        setScopeIfChanged(initialScope);
         if (initialScope.kind === "user") setLastUserId(initialScope.userId);
       } catch {
         const fallback = { kind: "guest" as const, guestId: getOrCreateGuestIdFromSessionStorage() };
-        setScopeIfChanged(fallback, "init");
+        setScopeIfChanged(fallback);
       } finally {
         setLoading(false);
       }
@@ -58,10 +52,10 @@ export function useScope() {
       if (event.key && !/^sb-|supabase/i.test(event.key)) return;
 
       getClientScope().then((s) => {
-        setScopeIfChanged(s, "storage");
+        setScopeIfChanged(s);
       }).catch(() => {
         const fallback = { kind: "guest" as const, guestId: getOrCreateGuestIdFromSessionStorage() };
-        setScopeIfChanged(fallback, "storage");
+        setScopeIfChanged(fallback);
       });
     };
 
@@ -70,23 +64,23 @@ export function useScope() {
       if (event === "SIGNED_OUT" || session == null) {
         clearLastUserId();
         const guestScope = { kind: "guest" as const, guestId: getOrCreateGuestIdFromSessionStorage() };
-        setScopeIfChanged(guestScope, event ?? "auth_event");
+        setScopeIfChanged(guestScope);
         return;
       }
       if (event === "SIGNED_IN" && session?.user) {
         const userScope = { kind: "user" as const, userId: session.user.id };
         setLastUserId(session.user.id);
-        setScopeIfChanged(userScope, event);
+        setScopeIfChanged(userScope);
         return;
       }
       // INITIAL_SESSION, TOKEN_REFRESHED, etc.: derive from session
       if (session?.user) {
         const userScope = { kind: "user" as const, userId: session.user.id };
         setLastUserId(session.user.id);
-        setScopeIfChanged(userScope, event ?? "auth_event");
+        setScopeIfChanged(userScope);
       } else {
         const guestScope = { kind: "guest" as const, guestId: getOrCreateGuestIdFromSessionStorage() };
-        setScopeIfChanged(guestScope, event ?? "auth_event");
+        setScopeIfChanged(guestScope);
       }
     });
 

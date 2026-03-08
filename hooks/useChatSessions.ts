@@ -497,7 +497,6 @@ export function useChatSessions(opts: {
           hasLoadedFoldersOnceRef.current = true;
           setHasLoadedFoldersOnce(true);
         }
-        console.log("[CHAT_FOLDERS_LOAD]", { scopeKind: "guest", guestId: scopeRef.current.guestId, source: "sessionStorage", count: sidebarFolders.length });
       } catch {
         // Do not setFolders([]); leave folders as-is for guest.
       }
@@ -505,22 +504,13 @@ export function useChatSessions(opts: {
     }
 
     const currentScope = scopeRef.current;
-    const scopeKind = currentScope?.kind;
-    if (!currentScope || scopeKind === undefined) return;
+    if (!currentScope) return;
 
     // User only: call /api/folders.
     try {
       const response = await fetch("/api/folders", { headers: getAuthHeaders() });
       const raw = await response.json().catch(() => null);
       const foldersArray = Array.isArray(raw) ? raw : null;
-      const returnedCount = foldersArray?.length ?? 0;
-
-      console.log("[FOLDERS_REFRESH]", {
-        scopeKind,
-        hasHydrated: hasHydratedRef.current,
-        status: response.status,
-        returnedCount,
-      });
 
       if (!response.ok) return;
       if (foldersArray === null) return;
@@ -532,12 +522,6 @@ export function useChatSessions(opts: {
           icon: f.icon || undefined,
         }))
         .filter((f) => !pendingDeletedChatFolderIdsRef.current.has(f.id));
-
-      console.log("[FOLDERS_LOAD] api", {
-        scopeKind,
-        count: sidebarFolders.length,
-        sample: sidebarFolders.slice(0, 5).map((f) => ({ id: f.id, icon: f.icon, name: f.name })),
-      });
 
       const cacheKey = getUserChatFoldersCacheKey(currentScope.userId);
       writeCache(cacheKey, sidebarFolders.map((f) => ({ id: f.id, name: f.name, icon: f.icon })));
@@ -553,7 +537,6 @@ export function useChatSessions(opts: {
           // ignore
         }
       }
-      console.log("[CHAT_FOLDERS_LOAD]", { scopeKind, guestId: undefined, source: "api", count: sidebarFolders.length });
     } catch (err) {
       console.error("Error loading folders from DB:", err);
     }
@@ -632,7 +615,6 @@ export function useChatSessions(opts: {
   const loadSessions = useCallback(async () => {
     // Skip loading if actively sending to prevent sidebar flicker
     if (isSendingRef.current) {
-      console.log(`[SESSIONS] loadSessions skipped - currently sending`);
       return;
     }
 
@@ -656,10 +638,6 @@ export function useChatSessions(opts: {
     }
     loadSessionsInFlightRef.current = true;
     lastLoadSessionsAtRef.current = now;
-    console.log("[LOAD_GUARD] run loadSessions", {
-      scopeKind: scopeRef.current?.kind,
-      activeSessionId: activeSessionIdRef.current,
-    });
 
     try {
       const response = await fetch("/api/sessions", {
@@ -702,14 +680,7 @@ export function useChatSessions(opts: {
       
       // Sort by mru_ts descending
       const sortedSessions = sessionsWithMru.sort((a: any, b: any) => b.mru_ts - a.mru_ts);
-      
-      // Log top 3 sessions with their sort keys for debugging
-      const top3 = sortedSessions.slice(0, 3).map((s: any) => ({
-        id: s.id,
-        mru_ts: s.mru_ts,
-      }));
-      console.log(`[SESSIONS] setSessions top3:`, top3);
-      
+
       setSessions(sortedSessions);
       
       // Folders are now loaded from DB via /api/sessions response (inFolderId)

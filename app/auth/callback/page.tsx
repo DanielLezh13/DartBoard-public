@@ -12,7 +12,6 @@ function AuthCallbackInner() {
     const handleCallback = async () => {
       const next = searchParams.get('next') ?? '/'
       const code = searchParams.get("code")
-      console.log('[CLIENT CALLBACK] Processing callback', { hasCode: !!code, next })
 
       const supabase = createClient()
 
@@ -34,7 +33,6 @@ function AuthCallbackInner() {
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (!error && session) {
-          console.log('[CLIENT CALLBACK] Got session, syncing to server...')
           try {
             const syncResponse = await fetch('/api/auth/sync', {
               method: 'POST',
@@ -51,8 +49,6 @@ function AuthCallbackInner() {
           } catch (syncError) {
             console.error('[CLIENT CALLBACK] Sync error:', syncError)
           }
-        } else {
-          console.log('[CLIENT CALLBACK] No session after callback', { hasError: !!error })
         }
       } catch (e) {
         console.error("[CLIENT CALLBACK] Callback handler error:", e)

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { normalizeText } from "@/lib/normalizeText";
 import { getServerScope } from "@/lib/scope-server";
+import { enforceApiRateLimit } from "@/lib/rateLimit";
+
+export const dynamic = "force-dynamic";
 
 const MAX_IMPORT_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
@@ -87,7 +90,7 @@ async function parseChatGPTParquet(buffer: ArrayBuffer): Promise<ArchiveRow[]> {
       const rawContent = record.text || record.content || record.message?.content?.parts || record.message?.content || "";
       
       // Normalize text to handle citation objects, arrays, and [object Object] artifacts
-      const normalizedText = normalizeText(rawContent, true); // Debug logging enabled
+      const normalizedText = normalizeText(rawContent);
       
       if (normalizedText && normalizedText.trim().length > 0) {
         rows.push({
@@ -140,7 +143,7 @@ function parseChatGPTJson(jsonText: string): ArchiveRow[] {
           const rawContent = msg.content?.parts || msg.content || msg.message?.content?.parts || msg.message?.content || msg.text || "";
           
           // Normalize text to handle citation objects, arrays, and [object Object] artifacts
-          const normalizedText = normalizeText(rawContent, false); // Set to true for debug logging
+          const normalizedText = normalizeText(rawContent);
           
           if (normalizedText && normalizedText.trim().length > 0) {
             rows.push({
@@ -169,7 +172,7 @@ function parseChatGPTJson(jsonText: string): ArchiveRow[] {
           const rawContent = msg.content?.parts || msg.content || msg.text || "";
           
           // Normalize text to handle citation objects, arrays, and [object Object] artifacts
-          const normalizedText = normalizeText(rawContent, false); // Set to true for debug logging
+          const normalizedText = normalizeText(rawContent);
           
           if (normalizedText && normalizedText.trim().length > 0) {
             rows.push({
@@ -243,6 +246,17 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    const db = getDb();
+    const rateLimited = enforceApiRateLimit({
+      db,
+      request,
+      route: { routeKey: "/api/archive/import", limit: 5, windowMs: 10 * 60 * 1000 },
+      scope,
+    });
+    if (rateLimited) {
+      return rateLimited;
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const formatParam = formData.get("format") as string | null;
@@ -299,7 +313,6 @@ export async function POST(request: NextRequest) {
     }
     
     // Insert into database with duplicate checking
-    const db = getDb();
     const insertStmt = db.prepare(
       `INSERT INTO archive_messages (ts, role, chat_id, text, source, user_id, guest_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`

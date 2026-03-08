@@ -52,7 +52,6 @@ export default function HubPlaceholderSection() {
     const file = e.target.files?.[0]
     if (file) {
       setCertificateFile(file)
-      console.log("[v0] Certificate uploaded:", file.name)
     }
   }
 

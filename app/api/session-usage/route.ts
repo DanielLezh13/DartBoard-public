@@ -4,6 +4,8 @@ import { getServerScope } from "@/lib/scope-server";
 import { getOwnedSession, parsePositiveInt } from "@/lib/ownership";
 import { getScopePlanLimits } from "@/lib/plan";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

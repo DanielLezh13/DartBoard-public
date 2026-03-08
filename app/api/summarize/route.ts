@@ -4,6 +4,8 @@ import { getOpenAIClient } from "@/lib/openai";
 import { getServerScope } from "@/lib/scope-server";
 import { getOwnedSession, parsePositiveInt } from "@/lib/ownership";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     let scope;

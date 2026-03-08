@@ -2213,11 +2213,6 @@ function ArchivePageInner() {
     // Ensure summary is never empty (API rejects empty summaries)
     const summary = data.summary.trim() || " ";
 
-    // DIAGNOSTIC: Log what we're sending to vault
-    console.log("[VAULT SAVE] Summary preview:", summary.substring(0, 500));
-    console.log("[VAULT SAVE] Contains table markers (|):", summary.includes("|"));
-    console.log("[VAULT SAVE] Contains table separator (---):", summary.includes("---"));
-
     try {
       const response = await fetch("/api/archive/vault", {
         method: "POST",

@@ -42,7 +42,6 @@ export function useSessionAttachments(
     if (hydratedSessionsRef.current.has(sessionId)) return;
     const headers = getAuthHeaders();
     const url = `/api/session-attachments?sessionId=${sessionId}`;
-    console.log("[SESSION_ATTACHMENTS_REQ]", { url, scopeKind: "inferred", hasGuestHeader: !!(headers as Record<string, string>)["x-guest-id"] });
     try {
       const response = await fetch(url, { headers });
       if (!response.ok) {
@@ -153,7 +152,6 @@ export function useSessionAttachments(
 
       const headers = getAuthHeaders();
       const url = "/api/session-attachments";
-      console.log("[SESSION_ATTACHMENTS_REQ]", { url, scopeKind: "inferred", hasGuestHeader: !!(headers as Record<string, string>)["x-guest-id"] });
       try {
         const response = await fetch(url, {
           method: "POST",
@@ -334,8 +332,6 @@ export function useSessionAttachments(
 
   // Toggle pin state for a memory
   const togglePin = useCallback(async (sessionId: number, memoryId: number) => {
-    console.log("[PIN_TOGGLE_CALL]", { sessionId, memoryId });
-    console.log("[PIN_TOGGLE] Request:", { sessionId, memoryId });
     try {
       const response = await fetch("/api/session-attachments/pin", {
         method: "POST",
@@ -351,7 +347,6 @@ export function useSessionAttachments(
       }
 
       const result = await response.json();
-      console.log("[PIN_TOGGLE] Response:", result);
       
       // Update local state with new pin state
       setAttachmentsBySession((prev) => {

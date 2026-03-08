@@ -5,6 +5,8 @@ import { getConfig } from "@/lib/config";
 import { getServerScope } from "@/lib/scope-server";
 import { getOwnedSession, parsePositiveInt } from "@/lib/ownership";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     let scope;

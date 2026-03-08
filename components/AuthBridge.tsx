@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/browser";
+import { createClient } from "@/lib/supabase/browser";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import {
   clearGuestSessionStorage,
@@ -24,6 +24,7 @@ export function AuthBridge({
   const prevSessionRef = useRef<Session | null | undefined>(undefined);
 
   useEffect(() => {
+    const supabase = createClient();
     const { data: sub } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       const prevSession = prevSessionRef.current;
       prevSessionRef.current = session;

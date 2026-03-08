@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getServerScope } from "@/lib/scope-server";
+import { enforceApiRateLimit } from "@/lib/rateLimit";
+
+export const dynamic = "force-dynamic";
 
 const ARCHIVE_SEARCH_DEFAULT_LIMIT = 50;
 const ARCHIVE_SEARCH_MAX_LIMIT = 100;
@@ -233,6 +236,15 @@ export async function GET(request: NextRequest) {
     }
 
     const db = getDb();
+    const rateLimited = enforceApiRateLimit({
+      db,
+      request,
+      route: { routeKey: "/api/archive/search", limit: 40, windowMs: 60 * 1000 },
+      scope,
+    });
+    if (rateLimited) {
+      return rateLimited;
+    }
 
     if (statsOnly) {
       const statsQuery = `

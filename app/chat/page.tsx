@@ -2896,14 +2896,11 @@ export default function ChatPage() {
 
   // Toggle pin state for landing memory (only when no active session)
   const toggleLandingPin = useCallback(async (memoryId: number) => {
-    console.log("[LANDING_PIN_TOGGLE] Toggling:", memoryId);
     setLandingPinnedById(prev => {
-      const newState = {
+      return {
         ...prev,
         [memoryId]: !prev[memoryId] // Default to true (pinned) when not set
       };
-      console.log("[LANDING_PIN_TOGGLE] New state:", newState);
-      return newState;
     });
   }, []);
 
@@ -3008,12 +3005,6 @@ export default function ChatPage() {
       : memoryFolders.find(f => f.name === selectedMemoryFolder);
     const folderId = currentFolder?.id ?? null;
     
-    console.log('[openBlankMemoryDraft]', { 
-      receivedFolderArg: folderName, 
-      resolvedFolderId: folderId,
-      currentFolder: currentFolder
-    });
-    
     const draft = {
       title: "Untitled",
       summary: "",
@@ -3021,9 +3012,7 @@ export default function ChatPage() {
       message_id: null,
       folder_id: folderId, // Add folder context
     };
-    
-    console.log('  - created draft:', draft);
-    
+
     setDraftMemory(draft);
     setSelectedMemoryId(null);
     setForceEditMemoryId(null);
@@ -3718,9 +3707,7 @@ export default function ChatPage() {
 
   // Thin wrapper for backward compatibility (sets state)
   const loadMessages = async (sessionId: number) => {
-    console.log('[loadMessages] Loading messages for session:', sessionId);
     const chatMessages = await fetchMessages(sessionId);
-    console.log('[loadMessages] Fetched messages:', chatMessages.length);
     setMessagesAndMarkLoaded(chatMessages);
     // Clear reveal state on load completion
     resetRevealState();
@@ -3732,12 +3719,10 @@ export default function ChatPage() {
 
   const createNewSession = async () => {
     try {
-      console.log("[chat] createNewSession: start");
       skipNextSessionFetchRef.current = true;
       await handleCreateSessionFromHook(mode);
       const found = sessions.find((s: Session) => s.id === activeSessionId);
       setMode((found?.mode as DartzModeId) ?? "tactical");
-      console.log('[createNewSession] Clearing messages');
       setMessages([]);
     } catch (err) {
       console.error("[chat] createNewSession error", err);
@@ -3918,7 +3903,6 @@ export default function ChatPage() {
         const msgRes = await fetch(`/api/messages?session_id=${leavingId}`);
         const msgs = await msgRes.json();
         if (Array.isArray(msgs) && msgs.length === 0) {
-          console.log("[PRISTINE] auto-delete", leavingId);
           await fetch("/api/sessions", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -4144,12 +4128,6 @@ export default function ChatPage() {
     };
   }, [memoryNodeMapRef]);
 
-  // Dev-only: verify memory overlay state changes (helps debug "drag becomes invisible" in narrow)
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
-    console.log("[DND] dragOverlayMemoryId", dragOverlayMemoryId);
-  }, [dragOverlayMemoryId]);
-
   const handleCreateFolder = useCallback(async () => {
     if (scope?.kind === "guest") {
       const base = getGuestFoldersFromStorage();
@@ -4232,7 +4210,6 @@ export default function ChatPage() {
   };
 
   const handleSetFolderIcon = async (id: number, icon: string | null) => {
-    console.log("[SET_ICON] start", { folderId: id, icon, scopeKind: scope?.kind });
     if (scope?.kind === "guest") {
       const base = getGuestFoldersFromStorage();
       const updated = base.map((f) => (f.id === id ? { ...f, icon: icon || undefined } : f));
@@ -4244,7 +4221,6 @@ export default function ChatPage() {
         }
       }
       setFolders(updated);
-      console.log("[SET_ICON] state-updated", { folderId: id, icon });
       return;
     }
     try {
@@ -4254,7 +4230,6 @@ export default function ChatPage() {
         body: JSON.stringify({ id, icon })
       });
       const resText = await res.clone().text();
-      console.log("[SET_ICON] resp", { ok: res.ok, status: res.status, body: resText.slice(0, 200) });
       if (!res.ok) {
         console.error("Failed to update folder icon:", res.status, resText);
         return;
@@ -4267,7 +4242,6 @@ export default function ChatPage() {
       const updated = prev.map((f) => (f.id === id ? { ...f, icon: icon || undefined } : f));
       return updated;
     });
-    console.log("[SET_ICON] state-updated", { folderId: id, icon });
   };
 
   const handleSetMemoryFolderIcon = async (id: number, icon: string | null) => {
@@ -4294,7 +4268,7 @@ export default function ChatPage() {
       });
       if (!response.ok) {
         const body = await response.text();
-        console.log("[handleSetMemoryFolderIcon] !response.ok", { status: response.status, body });
+        console.error("Failed to update memory folder icon:", response.status, body);
         return;
       }
       setMemoryFolders((prev) => {
@@ -4459,7 +4433,6 @@ export default function ChatPage() {
 
     // Reset to landing (no active session selected)
     setActiveSessionIdTraced(null, "openLanding");
-    console.log('[openLanding] Clearing messages');
     setMessages([]);
     setInput("");
     inputPreserveRef.current = "";
@@ -4509,14 +4482,12 @@ export default function ChatPage() {
     }
 
     // Create session
-    console.log('[ensureActiveSessionForSend] Creating session with scope:', scope);
     const res = await fetch("/api/sessions", {
       method: "POST",
       headers: scope ? getHeadersForScope(scope) : getAuthHeaders(),
       body: JSON.stringify({ source: "dartz_chat", mode, title: SESSION_TITLE_GENERATING }),
     });
     const json = await res.json().catch(() => ({}));
-    console.log('[ensureActiveSessionForSend] Session created:', json);
     if (!res.ok || typeof json.session_id !== "number") {
       throw new Error(json?.error || `Failed to create session (HTTP ${res.status})`);
     }
@@ -4742,16 +4713,6 @@ export default function ChatPage() {
       // Refresh sessions from server to ensure consistency
       await loadSessions();
       
-      // DEBUG: Log new session's mru_ts after loadSessions
-      const newSession = sidebarSessions.find(s => s.id === newSessionId);
-      if (newSession) {
-        console.log("[CLIENT DEBUG] New session after loadSessions:", {
-          id: newSession.id,
-          mru_ts: newSession.mru_ts,
-          updatedAt: newSession.updatedAt
-        });
-      }
-      
     } catch (error) {
       console.error("Failed to rollover chat:", error);
       const errorMessage = error instanceof Error ? error.message : "Failed to continue";
@@ -4863,10 +4824,8 @@ export default function ChatPage() {
     }
 
     // Check if user is signed in using scope
-    console.log('[handleSend] Scope:', scope, 'isLanding:', isLanding, 'guestMessageCount:', guestMessageCount, 'messages.length:', messages.length);
     if (!scope) {
       // If scope is loading, show loading message
-      console.log('[handleSend] No scope, showing loading message');
       setMessages(prev => [...prev, {
         id: Date.now(),
         role: 'assistant',
@@ -4956,7 +4915,7 @@ export default function ChatPage() {
           ...prev,
           {
             role: "assistant",
-            content: "Error: could not create a new chat session. Check console.",
+            content: "Error: could not create a new chat session.",
           },
         ]);
         return;
@@ -4979,7 +4938,6 @@ export default function ChatPage() {
     }
     
     // Don't add messages yet - wait until after session is created
-    console.log('[handleSend] Session will be created/used:', sessionIdToUse);
     
     // Immediately touch unfiled sessions on user send (custom folder ordering is separate).
     if (sessionIdToUse) {
@@ -5071,13 +5029,10 @@ export default function ChatPage() {
     setIsSending(true);
 
     try {
-      const t0 = performance.now();
       // Use canonical attached memory IDs from session result
       const attachedMemoryIdsForRequest = sessionResult.attachedMemoryIds;
       const sessionFocus = getFocusPayloadForSession(sessionIdToUse);
-      
-      console.log(`[SEND_PAYLOAD] sessionId=${sessionIdToUse} attachedIds=[${attachedMemoryIdsForRequest}]`);
-      
+
       // Add messages after session is created and composer animation is done
       const newMessages = [
         ...(messages || []), // Use current messages as base
@@ -5098,9 +5053,6 @@ export default function ChatPage() {
           session_id: sessionIdToUse,
         },
       ];
-      console.log('[handleSend] Messages ready. Total:', newMessages.length);
-      console.log('[handleSend] SessionIdToUse:', sessionIdToUse);
-      
       // Set the skip flag BEFORE setting messages
       skipNextSessionFetchRef.current = true;
       
@@ -5109,12 +5061,9 @@ export default function ChatPage() {
       const messageDelay = wasLanding ? 750 : 10; // 750ms to match composer animation
       
       setTimeout(() => {
-        console.log('[handleSend] Adding messages after', messageDelay, 'ms delay');
         setMessagesAndMarkLoaded(newMessages);
       }, messageDelay);
-      
-      console.log('[handleSend] Skipping next session fetch');
-      
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: scope ? getHeadersForScope(scope) : { "Content-Type": "application/json" },
@@ -5134,8 +5083,6 @@ export default function ChatPage() {
           userLocalNowIso,
         }),
       });
-      const t1 = performance.now();
-      console.log(`[chat] /api/chat HTTP ${res.status} in ${Math.round(t1 - t0)}ms`);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
@@ -5177,7 +5124,6 @@ export default function ChatPage() {
       ) {
         showToast(`Web search unavailable: ${data.web.error}`);
       }
-      console.log(`[chat] reply length=${String(reply || "").length} chars`);
 
       // Update token cache immediately if usage is returned
       if (data?.session_total_tokens != null && sessionIdToUse) {
@@ -5216,7 +5162,6 @@ export default function ChatPage() {
       }
 
       // Replace placeholder with real reply
-      console.log('[chat] Updating assistant message:', { assistantId, reply: reply?.substring(0, 50) });
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
@@ -5236,9 +5181,7 @@ export default function ChatPage() {
         const sidebarSession = sidebarSessions.find((s) => s.id === sessionIdToUse);
         const inFolderId = sidebarSession?.inFolderId ?? null;
         const shouldBump = inFolderId === null;
-        
-        console.log(`[MRU] bump session=${sessionIdToUse} folder=${inFolderId ?? 'null'} applied=${shouldBump}`);
-        
+
         if (shouldBump) {
           // Check if already at top BEFORE updating state
           const unfiledSessions = sidebarSessions.filter((s) => s.inFolderId == null);
@@ -5384,9 +5327,8 @@ export default function ChatPage() {
       
       // Skip reloading sessions after message - it causes messages to disappear
       // The MRU bump is handled server-side now
-      console.log('[handleSend] Skipping loadSessions to prevent message reload');
       if (shouldReload) {
-        console.log('[handleSend] Would have reloaded sessions, but skipping to prevent message loss');
+        // Intentionally no-op: reloading here still causes visible message loss.
       }
       // If already at top and no new session, skip loadSessions() - client bump is sufficient
     } catch (err) {
@@ -5406,82 +5348,7 @@ export default function ChatPage() {
         webGlowRevealMessageIdRef.current = null;
       }
     } finally {
-      console.log('[handleSend] Finally block - setting isSending to false');
       setIsSending(false);
-    }
-  };
-
-
-  // Dev-only chat test function
-  const runChatTest = async () => {
-    console.log("[TEST] START");
-    
-    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    
-    const assert = (name: string, cond: boolean, extra?: Record<string, any>) => {
-      if (cond) {
-        console.log(`[TEST] PASS: ${name}`, extra || "");
-      } else {
-        console.error(`[TEST] FAIL: ${name}`, extra || "");
-      }
-    };
-
-    try {
-      // A) Ensure active session
-      if (!activeSessionIdRef.current) {
-        await handleCreateSession();
-        // Poll until session is created
-        let attempts = 0;
-        while (!activeSessionIdRef.current && attempts < 50) {
-          await sleep(100);
-          attempts++;
-        }
-        if (!activeSessionIdRef.current) {
-          throw new Error("Failed to create session");
-        }
-      }
-
-      // B) Send message 1
-      await handleSend("test-1: short");
-      while (isSendingRef.current) {
-        await sleep(100);
-      }
-      await sleep(500); // Allow reveal to complete
-
-      // C) Send message 2 (long)
-      await handleSend("test-2: produce a LONG response (at least 2000 words) with numbered items 1..120");
-      while (isSendingRef.current) {
-        await sleep(100);
-      }
-      await sleep(2000); // Allow longer reveal to complete
-
-      // D) Toggle search on then off
-      handleToggleSearchMode();
-      await sleep(700);
-      handleToggleSearchMode();
-      await sleep(900);
-
-      // E) Simulate detach
-      const c = scrollContainerRef.current;
-      if (c) {
-        c.scrollTop = Math.max(0, c.scrollTop - 600);
-        await sleep(250);
-      }
-
-      // F) Trigger reattach
-      handleScrollDownFab();
-      await sleep(350);
-
-      // Assertions
-      assert("scrollLockReason cleared", scrollLockReasonRef.current === null, { scrollLockReason: scrollLockReasonRef.current });
-      assert("not in searchMode", searchModeRef.current === false, { searchMode: searchModeRef.current });
-      assert("no active reveal", revealMessageIdRef.current === null, { reveal: revealMessageIdRef.current });
-      assert("at bottom after reattach", isAtBottomRef.current === true, { atBottom: isAtBottomRef.current, dist: distToBottomRef.current });
-      assert("FAB hidden at bottom", showScrollDownFabRef.current === false, { showScrollDownFab: showScrollDownFabRef.current });
-
-      console.log("[TEST] END");
-    } catch (err) {
-      console.error("[TEST] END (error):", err);
     }
   };
   
@@ -5521,7 +5388,6 @@ export default function ChatPage() {
       onDeleteSession={handleDeleteSession}
       onRenameFolder={handleRenameFolder}
       onDeleteFolder={handleDeleteFolder}
-      runChatTest={runChatTest}
       sessionUsageRatio={activeSessionLifetimeRatio}
       onNewChatWithFolder={handleNewChatWithFolder}
     />
@@ -5536,7 +5402,6 @@ export default function ChatPage() {
     handleDeleteSession,
     handleRenameFolder,
     handleDeleteFolder,
-    runChatTest,
     activeSessionLifetimeRatio,
     handleNewChatWithFolder
   ]);

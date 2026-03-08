@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getServerScope } from "@/lib/scope-server";
 
+export const dynamic = "force-dynamic";
+
 const clampWindow = (value: number) => {
   if (Number.isNaN(value) || value < 1) return 20;
   if (value > 200) return 200;

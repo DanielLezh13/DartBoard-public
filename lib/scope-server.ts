@@ -1,6 +1,6 @@
 import { createServerClient } from "./supabase/server";
 import { NextRequest } from "next/server";
-import type { Scope } from "./scope-client";
+import type { Scope } from "./scope-shared";
 
 /**
  * Server-side: Get scope from request (cookies for user, headers for guest)
@@ -23,6 +23,5 @@ export async function getServerScope(request: NextRequest): Promise<Scope> {
   throw new Error("No authenticated user or guest identity found");
 }
 
-// Re-export types from client
-export type { Scope } from "./scope-client";
-export { scopeToWhereClause, getHeadersForScope } from "./scope-client";
+export type { Scope } from "./scope-shared";
+export { scopeToWhereClause, getHeadersForScope } from "./scope-shared";

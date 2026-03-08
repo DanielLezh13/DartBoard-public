@@ -349,7 +349,6 @@ function SortableFolderItem({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              console.log('Edit button clicked'); // Debug
               handleEditClick(e);
             }}
             onMouseDown={(e) => {

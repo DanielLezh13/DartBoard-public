@@ -21,8 +21,6 @@ export async function POST(request: NextRequest) {
       console.error('[SYNC] Failed to set session:', error)
       return NextResponse.json({ error: 'Failed to sync' }, { status: 500 })
     }
-
-    console.log('[SYNC] Session synced successfully')
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('[SYNC] Error:', error)

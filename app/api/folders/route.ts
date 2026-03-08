@@ -4,6 +4,8 @@ import { getServerScope } from "@/lib/scope-server";
 import { getOwnedChatFolder, parsePositiveInt } from "@/lib/ownership";
 import { getScopePlanLimits } from "@/lib/plan";
 
+export const dynamic = "force-dynamic";
+
 // GET - Fetch all folders
 export async function GET(request: NextRequest) {
   try {

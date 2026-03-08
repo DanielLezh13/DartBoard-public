@@ -9,6 +9,8 @@ import {
   parsePositiveInt,
 } from "@/lib/ownership";
 
+export const dynamic = "force-dynamic";
+
 const MAX_SESSION_SEARCH_QUERY_CHARS = 200;
 
 export async function GET(request: NextRequest) {

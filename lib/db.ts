@@ -154,6 +154,24 @@ export function getDb(): Database.Database {
       PRIMARY KEY(user_id, usage_date, metric)
     );
 
+    CREATE TABLE IF NOT EXISTS uploaded_images(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      stored_name TEXT NOT NULL UNIQUE,
+      original_name TEXT,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      user_id TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS api_rate_limits(
+      route_key TEXT NOT NULL,
+      actor_key TEXT NOT NULL,
+      window_start_ms INTEGER NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(route_key, actor_key, window_start_ms)
+    );
+
     CREATE TABLE IF NOT EXISTS session_memory_attachments(
       session_id INTEGER NOT NULL,
       memory_id INTEGER NOT NULL,
@@ -247,6 +265,8 @@ export function getDb(): Database.Database {
       CREATE INDEX IF NOT EXISTS idx_archive_text ON archive_messages(text);
       -- Composite index for efficient sorting and position queries
       CREATE INDEX IF NOT EXISTS idx_archive_ts_id ON archive_messages(ts, id);
+      CREATE INDEX IF NOT EXISTS idx_uploaded_images_user_created_at ON uploaded_images(user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_api_rate_limits_window_start ON api_rate_limits(window_start_ms);
     `);
   } catch (e: any) {
     console.warn("Error creating archive_messages indexes:", e);
@@ -424,8 +444,6 @@ export function getDb(): Database.Database {
     `).get() as { count: number };
     
     if (needsNormalization.count > 0) {
-      console.log(`[DB] Normalizing ${needsNormalization.count} sessions with old mru_ts format`);
-      
       // Update sessions with seconds-based mru_ts to milliseconds
       db.prepare(`
         UPDATE sessions 
@@ -445,8 +463,6 @@ export function getDb(): Database.Database {
         SET mru_ts = strftime('%s', updated_at) * 1000
         WHERE mru_ts = 0
       `).run();
-      
-      console.log("[DB] mru_ts normalization complete");
     }
   } catch (e: any) {
     console.warn("Error normalizing mru_ts:", e);

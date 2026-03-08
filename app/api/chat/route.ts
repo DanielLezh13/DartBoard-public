@@ -18,8 +18,12 @@ import {
   getScopePlanLimits,
   incrementDailyUsage,
 } from "@/lib/plan";
+import { enforceApiRateLimit } from "@/lib/rateLimit";
 import { readFile } from "fs/promises";
 import { basename, extname, join } from "path";
+import { getPrivateUploadPath, sanitizeStoredUploadName } from "@/lib/uploads";
+
+export const dynamic = "force-dynamic";
 
 const TAVILY_SEARCH_URL = "https://api.tavily.com/search";
 const TAVILY_EXTRACT_URL = "https://api.tavily.com/extract";
@@ -154,18 +158,21 @@ function extractLocalUploadFilePath(pathOrUrl: string): string | null {
   } else if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) {
     try {
       const parsed = new URL(pathOrUrl);
-      const isLocalHost =
-        parsed.hostname === "localhost" ||
-        parsed.hostname === "127.0.0.1";
-      if (isLocalHost) {
-        pathname = parsed.pathname;
-      }
+      pathname = parsed.pathname;
     } catch {
       pathname = null;
     }
   }
 
-  if (!pathname || !pathname.startsWith("/uploads/")) return null;
+  if (!pathname) return null;
+
+  if (pathname.startsWith("/api/upload/image/")) {
+    const fileName = sanitizeStoredUploadName(basename(pathname));
+    if (!fileName) return null;
+    return getPrivateUploadPath(fileName);
+  }
+
+  if (!pathname.startsWith("/uploads/")) return null;
 
   // Upload route stores flat files in /public/uploads/<filename>
   const fileName = basename(pathname);
@@ -690,6 +697,15 @@ export async function POST(request: NextRequest) {
 
     // Get database connection (used for both memories and chat history)
     const db = getDb();
+    const rateLimited = enforceApiRateLimit({
+      db,
+      request,
+      route: { routeKey: "/api/chat", limit: 20, windowMs: 10 * 60 * 1000 },
+      scope,
+    });
+    if (rateLimited) {
+      return rateLimited;
+    }
     const { plan, limits } = getScopePlanLimits(db, scope);
 
     const maxInputChars = Number.isFinite(limits.maxInputChars)

@@ -594,11 +594,8 @@ export function FloatingChatComposer({
 
   // Handle brain click - open popup (composer only opens popup, landing toggles injection)
   const handleBrainClick = useCallback(() => {
-    if (!brainPopoverOpen) {
-      console.log("[COMPOSER_ATTACH_OPEN]", { scopeKind: scopeKind ?? undefined, activeSessionId: activeSessionId ?? undefined });
-    }
     setBrainPopoverOpen(!brainPopoverOpen);
-  }, [brainPopoverOpen, scopeKind, activeSessionId]);
+  }, [brainPopoverOpen]);
 
   // Click outside handler for brain popover
   useEffect(() => {
@@ -991,16 +988,6 @@ export function FloatingChatComposer({
     
     if (valid.length > 0) {
       setAttachments(prev => [...prev, ...valid]);
-      
-      // Log file details
-      valid.forEach(file => {
-        console.log('File attached:', {
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          lastModified: new Date(file.lastModified).toISOString()
-        });
-      });
     }
   };
 
@@ -1632,18 +1619,13 @@ export function FloatingChatComposer({
                                               <div className="flex items-center gap-2 relative z-10">
                                                 {/* Pin toggle button on the left */}
                                                 {onTogglePin && (
-                                                  <button
-                                                    onClick={async (e) => {
-                                                      e.stopPropagation();
-                                                      const memoryId = memory.id;
-                                                      console.log("[PIN_CLICK]", {
-                                                        activeSessionId,
-                                                        memory,
-                                                        memoryId,
-                                                      });
-                                                      try {
-                                                        await onTogglePin(memoryId);
-                                                      } catch (err) {
+	                                                  <button
+	                                                    onClick={async (e) => {
+	                                                      e.stopPropagation();
+	                                                      const memoryId = memory.id;
+	                                                      try {
+	                                                        await onTogglePin(memoryId);
+	                                                      } catch (err) {
                                                         console.error("Failed to toggle pin:", err);
                                                         // Optionally show a toast here if you have one
                                                       }

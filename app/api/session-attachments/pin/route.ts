@@ -3,6 +3,8 @@ import { getDb } from "@/lib/db";
 import { getServerScope } from "@/lib/scope-server";
 import { getOwnedMemory, getOwnedSession, getScopeOwner, parsePositiveInt } from "@/lib/ownership";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     const { sessionId, memoryId } = await request.json();

@@ -77,15 +77,6 @@ export function clearGuestSessionStorage(): void {
   }
 }
 
-/** Log which of the auth-boundary keys exist (for instrumentation). */
-export function logSessionStorageKeysPresent(label: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    const present = AUTH_BOUNDARY_SESSION_KEYS.filter(
-      (k) => sessionStorage.getItem(k) !== null
-    );
-    console.log("[SS_KEYS]", label, present);
-  } catch {
-    // ignore
-  }
+/** @deprecated Instrumentation removed; kept for compatibility. */
+export function logSessionStorageKeysPresent(_label: string): void {
 }

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getServerScope } from '@/lib/scope-server';
 import { getScopeOwner, parsePositiveInt } from '@/lib/ownership';
+import { enforceApiRateLimit } from '@/lib/rateLimit';
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +21,15 @@ export async function POST(request: NextRequest) {
     const scope = await getServerScope(request);
     const owner = getScopeOwner(scope);
     const db = getDb();
+    const rateLimited = enforceApiRateLimit({
+      db,
+      request,
+      route: { routeKey: "/api/sessions/touch", limit: 30, windowMs: 60 * 1000 },
+      scope,
+    });
+    if (rateLimited) {
+      return rateLimited;
+    }
     const now = Date.now();
     const nowIso = new Date().toISOString();
     
@@ -34,12 +46,6 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
-
-    console.log("[TOUCH SESSION] Updated mru_ts:", {
-      sessionId,
-      mru_ts: now,
-      timestamp: nowIso
-    });
 
     return NextResponse.json({
       success: true,

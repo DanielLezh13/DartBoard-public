@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getServerScope } from "@/lib/scope-server";
 
+export const dynamic = "force-dynamic";
+
 const MAX_FOCUS_CHARS = 60;
 
 function normalizeFocusGoal(input: string): string {

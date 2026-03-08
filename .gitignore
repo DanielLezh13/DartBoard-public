@@ -41,9 +41,19 @@ next-env.d.ts
 dartz_memory.db
 dartz_memory.db-wal
 dartz_memory.db-shm
+data.db
 *.db-journal
 *.sqlite-journal
 
-# runtime uploads (keep folder via .gitkeep)
+# local artifacts
+/output/
+/tmp/
+*.bak
+*.backup
+
+# private uploads
+/storage/uploads/
+
+# legacy public uploads (keep folder via .gitkeep)
 public/uploads/*
 !public/uploads/.gitkeep

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getServerScope } from "@/lib/scope-server";
 import { wipeGuestDataByGuestId } from "@/lib/guest-data";
+import { enforceApiRateLimit } from "@/lib/rateLimit";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  console.log("[GUEST_WIPE] start");
-  
   try {
     let scope;
     try {
@@ -25,12 +26,18 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getDb();
+    const rateLimited = enforceApiRateLimit({
+      db,
+      request,
+      route: { routeKey: "/api/guest/wipe", limit: 5, windowMs: 10 * 60 * 1000 },
+      scope,
+    });
+    if (rateLimited) {
+      return rateLimited;
+    }
 
     const results = wipeGuestDataByGuestId(db, scope.guestId);
     const wipedCount = Object.values(results).reduce((sum, value) => sum + value, 0);
-
-    console.log(`Guest wipe completed for guest ${scope.guestId}:`, results);
-    console.log("[GUEST_WIPE] ok");
     
     return NextResponse.json({
       message: wipedCount > 0 ? "Guest data wiped successfully" : "No guest data found to wipe",

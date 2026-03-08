@@ -38,8 +38,6 @@ export async function POST(request: NextRequest) {
     const results = claimGuestDataToUser(db, guestId, userId);
     const claimedCount = Object.values(results).reduce((sum, value) => sum + value, 0);
 
-    console.log(`Guest claim completed for user ${userId} guest ${guestId}:`, results);
-
     return NextResponse.json({
       message: claimedCount > 0 ? "Guest data claimed successfully" : "No guest data found to claim",
       claimed: claimedCount > 0,

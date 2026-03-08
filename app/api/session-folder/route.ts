@@ -7,6 +7,8 @@ import {
   parsePositiveInt,
 } from "@/lib/ownership";
 
+export const dynamic = "force-dynamic";
+
 // GET - Get folder for a specific session
 export async function GET(request: NextRequest) {
   try {

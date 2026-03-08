@@ -1,104 +1,99 @@
 # DartBoard
 
-AI chat + memory workspace for long-running workflows, with archive search, foldered sessions, and Stripe-powered Plus billing.
+DartBoard is an AI workspace for long-running conversations.
 
-## Live Demo
+Instead of treating each chat like a disposable thread, it lets you:
+- attach reusable memories to a session
+- import and search a ChatGPT archive
+- branch, continue, and roll over conversations
+- shape behavior with modes and session focus
 
-- App: `https://dartboard-production-71e8.up.railway.app`
-- Video walkthrough: `TODO: add YouTube/Loom link`
+## Why It Exists
 
-## Screenshots
+Most chat apps are good at a single prompt and bad at continuity.
 
-> Replace these with your real images after recording/capturing.
+DartBoard is built around continuity:
+- session-level memory attachment instead of hidden retrieval
+- archive search over imported history plus live chat
+- workflows for resuming, branching, and compressing long threads
 
-![Chat Workspace](public/readme/chat-workspace.png)
-![Memory Vault + Drag to Chat](public/readme/memory-drag-injection.png)
-![Archive Search](public/readme/archive-search.png)
+## Core Features
 
-## What DartBoard Can Do
+- Chat workspace with mode switching, focus state, and memory injection
+- Memory vault with folders, rich editing, and session attachments
+- Archive import from ChatGPT exports (`.json` and `.parquet`)
+- Archive search, context windows, and monthly timeline views
+- Image attachments for model turns
+- Supabase auth and Stripe-backed Plus billing
 
-- Create and organize chats in folders.
-- Use the right-side Memory workspace to create, edit, organize, and reuse memories while chatting.
-- Drag memories directly into chat for context injection.
-- Attach, detach, and pin session-specific memories.
-- Import and search ChatGPT archives.
-- Switch modes/focus behavior during chat sessions.
-- Authenticate users with Supabase.
-- Upgrade to Plus using Stripe checkout + webhook plan sync.
+## Stack
 
-## How It Works (High Level)
+- Next.js App Router
+- React + TypeScript
+- SQLite via `better-sqlite3`
+- Supabase auth
+- OpenAI responses/chat APIs
+- Gemini/Tavily for optional web-backed turns
 
-- **Frontend**: Next.js App Router + React + TypeScript + Tailwind.
-- **Auth**: Supabase session and scope checks.
-- **Storage**: SQLite (`better-sqlite3`) for soft-launch single-node deployment.
-- **LLM**: OpenAI chat completions with token-budget-aware memory injection.
-- **Billing**: Stripe checkout, billing portal, and webhook-driven plan updates.
+## Architecture Notes
+
+- The current deployment model is intentionally single-node.
+- SQLite is the source of truth for chats, memories, archive rows, usage, and rate limits.
+- Uploaded images are stored privately and served through authenticated routes.
+
+This is a pragmatic v1 architecture, not a horizontally scaled one.
 
 ## Local Setup
 
 ```bash
 npm install
 cp .env.example .env.local
+npm run typecheck
+npm run build
 npm run dev
 ```
 
 Open `http://localhost:3000`.
 
+The chat app lives at `/`.
+The marketing page lives at `/home`.
+
 ## Environment Variables
 
-Core:
-
+Required:
 - `OPENAI_API_KEY`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
 Billing:
-
 - `STRIPE_SECRET_KEY`
 - `STRIPE_PLUS_PRICE_ID`
 - `STRIPE_WEBHOOK_SECRET`
 
 Optional:
-
 - `NEXT_PUBLIC_BASE_URL`
+- `DB_PATH`
 - `DARTZ_MAX_OUTPUT_TOKENS`
-
-## Stripe Webhook Events
-
-Configure endpoint:
-
-- `https://<your-domain>/api/billing/webhook`
-
-Subscribe to:
-
-- `checkout.session.completed`
-- `customer.subscription.created`
-- `customer.subscription.updated`
-- `customer.subscription.deleted`
+- `GEMINI_API_KEY`
+- `TAVILY_API_KEY`
 
 ## Scripts
 
-- `npm run dev` - local development server
-- `npm run typecheck` - TypeScript checks
-- `npm run lint` - ESLint checks
-- `npm run build` - production build
+- `npm run dev`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
 
-## Safety and Constraints
+## Shipping Constraints
 
-- Markdown rendering is hardened (no raw HTML execution).
-- Uploads are validated by magic bytes.
-- Search and expensive endpoints have auth/throttling guards.
-- Current architecture is intentionally single-node for soft launch.
-
-## Roadmap
-
-- Multi-instance-safe persistence/rate limiting.
-- Additional memory tooling and retrieval UX.
-- Expanded analytics and onboarding polish.
+- This repo is optimized for a real single-server deployment, not multi-region scale.
+- Rate limiting and usage tracking are persisted in SQLite.
+- Public-launch hardening should focus on privacy, auth boundaries, build health, and repo cleanliness before adding more product surface.
 
 ## Docs
 
 - [API Route Map](docs/API_ROUTE_MAP.md)
 - [Launch Checklist](docs/LAUNCH_CHECKLIST.md)
 - [Manual QA Script](docs/MANUAL_QA_SCRIPT.md)
+- [Chat Invariants](README-chat-invariants.md)

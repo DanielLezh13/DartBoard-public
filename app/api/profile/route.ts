@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserProfile, saveUserProfile } from "@/lib/db";
 import { getServerScope } from "@/lib/scope-server";
 
+export const dynamic = "force-dynamic";
+
 const MAX_DISPLAY_NAME_CHARS = 32;
 const MAX_PERSONAL_CONTEXT_CHARS = 500;
 const MAX_PREFERENCES_CHARS = 700;

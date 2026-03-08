@@ -7,7 +7,6 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization')
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('[SYNC SESSION] No auth header found')
       return NextResponse.json({ error: 'No session' }, { status: 401 })
     }
 
@@ -20,7 +19,6 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error } = await tempSupabase.auth.getUser(token)
     
     if (error || !user) {
-      console.log('[SYNC SESSION] Invalid token:', error?.message)
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
     }
 
@@ -32,11 +30,9 @@ export async function POST(request: NextRequest) {
     })
 
     if (signInError) {
-      console.log('[SYNC SESSION] Failed to set session:', signInError.message)
       return NextResponse.json({ error: 'Failed to sync' }, { status: 500 })
     }
 
-    console.log('[SYNC SESSION] Successfully synced session for user:', user.id)
     return NextResponse.json({ success: true, userId: user.id })
   } catch (error) {
     console.error('[SYNC SESSION] Error:', error)

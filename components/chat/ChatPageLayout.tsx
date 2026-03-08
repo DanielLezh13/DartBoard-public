@@ -1284,9 +1284,6 @@ export function ChatPageLayout(props: any) {
                       const safeIndex = currentIndex === -1 ? 0 : currentIndex;
                       const nextIndex = (safeIndex + 1) % DARTZ_MODES.length;
                       const nextMode = DARTZ_MODES[nextIndex]?.id ?? "tactical";
-                      if (process.env.NODE_ENV === "development") {
-                        console.log("[MODE] cycle", { mode, currentIndex, safeIndex, nextIndex, nextMode });
-                      }
                       handleModeChange(nextMode);
                     }}
                   >
@@ -1426,12 +1423,8 @@ export function ChatPageLayout(props: any) {
               }}
               onSave={handleMemorySave}
               onSaveDraft={async (draft: DraftMemory) => {
-                console.log("[DRAFT SAVE] keys:", Object.keys(draft));
-                console.log("[DRAFT SAVE] full draft:", draft);
-                console.log("[DRAFT SAVE] incoming draft", draft);
-
-	                // Check if user is guest
-	                if (scope?.kind === "guest") {
+		                // Check if user is guest
+		                if (scope?.kind === "guest") {
 	                  const topPos = -(Date.now() * 1000 + Math.floor(Math.random() * 1000));
 	                  // Resolve folder_name from folder_id (MemoryPreview passes folder_id)
 	                  const folderId = (draft as any)?.folder_id ?? null;
@@ -1493,14 +1486,11 @@ export function ChatPageLayout(props: any) {
 	                  doc_json: (draft as any)?.doc_json ?? null,
 	                  session_id: draft.session_id || null,
 	                  message_id: draft.message_id || null,
-	                  folder_id: (draft as any)?.folder_id ?? null,
+		                  folder_id: (draft as any)?.folder_id ?? null,
                 };
 
-                console.log("[DRAFT SAVE] payload with folder_id:", payload);
-                console.log("[DRAFT SAVE] folder_id being sent:", payload.folder_id);
-
-	                try {
-	                  const response = await fetch("/api/memory", {
+		                try {
+		                  const response = await fetch("/api/memory", {
 	                    method: "POST",
 	                    headers: { "Content-Type": "application/json" },
 	                    body: JSON.stringify(payload),
@@ -1517,14 +1507,13 @@ export function ChatPageLayout(props: any) {
                       // If response is not JSON, keep default message
                     }
                     console.error("[DRAFT SAVE] Server error:", errorMessage);
-                    throw new Error(errorMessage);
-                  }
+		                    throw new Error(errorMessage);
+		                  }
 
-	                  const newMemory = await response.json();
-	                  console.log("[DRAFT SAVE] server returned", newMemory);
-	                  const topPos = -(Date.now() * 1000 + Math.floor(Math.random() * 1000));
-	                  const normalizedId = upsertMemoryInCache?.(newMemory as any) ?? Number((newMemory as any)?.id);
-	                  if (!Number.isFinite(normalizedId)) {
+		                  const newMemory = await response.json();
+		                  const topPos = -(Date.now() * 1000 + Math.floor(Math.random() * 1000));
+		                  const normalizedId = upsertMemoryInCache?.(newMemory as any) ?? Number((newMemory as any)?.id);
+		                  if (!Number.isFinite(normalizedId)) {
 	                    throw new Error("Failed to resolve saved memory id");
 	                  }
 
@@ -1920,14 +1909,11 @@ export function ChatPageLayout(props: any) {
                   </div>
                 );
               })()
-            ) : dragOverlayMemoryId != null ? (
-              (() => {
-                if (process.env.NODE_ENV === "development") {
-                  console.log("[DND] Memory DragOverlay render (desktop)", { dragOverlayMemoryId });
-                }
-                const memory = memories.find((m: any) => m.id === dragOverlayMemoryId);
-                if (!memory) return null;
-                const title = memory.title || "Untitled";
+	            ) : dragOverlayMemoryId != null ? (
+	              (() => {
+	                const memory = memories.find((m: any) => m.id === dragOverlayMemoryId);
+	                if (!memory) return null;
+	                const title = memory.title || "Untitled";
                 return (
                   <div style={{ width: "240px", pointerEvents: "none" }}>
                     <div className="rounded-md px-2.5 py-1.5 bg-slate-800/95 border border-slate-600/50 shadow-xl"
@@ -2157,14 +2143,11 @@ export function ChatPageLayout(props: any) {
                                   </div>
                                 );
                               })()
-                            ) : dragOverlayMemoryId != null ? (
-                              (() => {
-                                if (process.env.NODE_ENV === "development") {
-                                  console.log("[DND] Memory DragOverlay render (narrow)", { dragOverlayMemoryId });
-                                }
-                                const memory = memories.find((m: any) => m.id === dragOverlayMemoryId);
-                                if (!memory) return null;
-                                const title = memory.title || "Untitled";
+	                            ) : dragOverlayMemoryId != null ? (
+	                              (() => {
+	                                const memory = memories.find((m: any) => m.id === dragOverlayMemoryId);
+	                                if (!memory) return null;
+	                                const title = memory.title || "Untitled";
                                 return (
                                   <div style={{ width: "240px", pointerEvents: "none" }}>
                                     <div className="rounded-md px-2.5 py-1.5 bg-slate-800/95 border border-slate-600/50 shadow-xl"
@@ -2241,27 +2224,12 @@ export function ChatPageLayout(props: any) {
                       folderListContainerRef={leftFolderListRef}
                       onOpenHomeOverlay={openHomeOverlay}
                       onResetToLanding={handleCreateSession}
-                      scope={scope}
-                      disableRailItemMotion={disableRailItemMotion}
-                      maxFolders={signedInFolderLimit}
-                    />
-                    {(() => {
-                      const active = activeSessionId;
-                      const exists = active != null && sidebarSessions.some((s: any) => s.id === active);
-                      const where = active == null ? "none" : (sidebarSessions.find((s: any) => s.id === active)?.inFolderId ?? null);
-                    
-                      console.log("[NAV INPUT]", {
-                        active,
-                        exists,
-                        where,
-                        count: sidebarSessions.length,
-                        top3: sidebarSessions.slice(0,3).map((s: any) => [s.id, s.updatedAt, s.inFolderId]),
-                      });
-                    
-                      return null;
-                    })()}
-                    {chatNavigatorEl}
-                  </div>
+	                      scope={scope}
+	                      disableRailItemMotion={disableRailItemMotion}
+	                      maxFolders={signedInFolderLimit}
+	                    />
+	                    {chatNavigatorEl}
+	                  </div>
                   <DragOverlay>
                     {dragOverlaySessionId != null ? (
                       (() => {

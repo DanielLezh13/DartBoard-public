@@ -3,6 +3,10 @@ import { getOpenAIClient } from "@/lib/openai";
 import { getConfig } from "@/lib/config";
 import { makeAutoTitleFromAssistant } from "@/lib/chatHelpers";
 import { getServerScope } from "@/lib/scope-server";
+import { getDb } from "@/lib/db";
+import { enforceApiRateLimit } from "@/lib/rateLimit";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,6 +22,16 @@ export async function POST(request: NextRequest) {
         { error: "Sign in required for title generation" },
         { status: 403 }
       );
+    }
+    const db = getDb();
+    const rateLimited = enforceApiRateLimit({
+      db,
+      request,
+      route: { routeKey: "/api/title", limit: 20, windowMs: 10 * 60 * 1000 },
+      scope,
+    });
+    if (rateLimited) {
+      return rateLimited;
     }
 
     const body = await request.json();
@@ -136,5 +150,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
 

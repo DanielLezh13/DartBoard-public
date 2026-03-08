@@ -521,8 +521,6 @@ export function useChatDnd(args: {
     // Case 4b: Memory reorder (memory → memory) - within current visible subset
     // IMPORTANT: Must exclude "memory-folder-*" and "memory-all-bubble" to avoid catching folder/bubble drops
     if (activeIdStr.startsWith("memory-") && overIdStr.startsWith("memory-") && !overIdStr.startsWith("memory-folder-") && overIdStr !== "memory-all-bubble") {
-      if (process.env.NODE_ENV === "development") console.log("[DND] branch", "memory-reorder");
-
       const draggedId = parseInt(activeIdStr.replace("memory-", ""));
       const targetId = parseInt(overIdStr.replace("memory-", ""));
 
@@ -573,8 +571,6 @@ export function useChatDnd(args: {
 
     // Case 5: Memory → Memory Folder (move memory to folder)
     if (activeIdStr.startsWith("memory-") && overIdStr.startsWith("memory-folder-")) {
-      if (process.env.NODE_ENV === "development") console.log("[DND] branch", "memory->folder");
-
       const memoryId = parseInt(activeIdStr.replace("memory-", ""));
       const folderId = parseInt(overIdStr.replace("memory-folder-", ""));
 
@@ -587,8 +583,6 @@ export function useChatDnd(args: {
 
     // Case 5b: Memory → All Bubble (move memory to unsorted)
     if (activeIdStr.startsWith("memory-") && overIdStr === "memory-all-bubble") {
-      if (process.env.NODE_ENV === "development") console.log("[DND] branch", "memory->all-bubble");
-
       const memoryId = parseInt(activeIdStr.replace("memory-", ""));
 
       if (handleMoveMemoryToFolder) {
@@ -603,9 +597,6 @@ export function useChatDnd(args: {
     if (activeIdStr.startsWith("memory-") && overIdStr === "chat-dropzone") {
       // Block attachment when memory overlay is open
       if (memoryOverlayOpen) {
-        if (process.env.NODE_ENV === "development") {
-          console.log("[DND] Blocked memory attach: memory overlay is open");
-        }
         return;
       }
       
@@ -623,8 +614,6 @@ export function useChatDnd(args: {
         return;
       }
       
-      if (process.env.NODE_ENV === "development") console.log("[DND] branch", "memory->chat-dropzone");
-
       if (activeSessionIdRef.current) {
         // attachMemoryToActiveSession is now async
         attachMemoryToActiveSession(memoryId).catch(console.error);

@@ -163,10 +163,8 @@ Provide a concise summary that captures the essential information:`;
       JSON.stringify({ summarizedUntilId: lastSummarizedId })
     );
 
-    console.log(`Compressed context for session ${sessionId}: summarized ${messagesToSummarize.length} messages`);
   } catch (error) {
     console.error("Error compressing context:", error);
     // Don't throw - compression failure shouldn't break the chat
   }
 }
-

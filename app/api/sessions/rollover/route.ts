@@ -4,6 +4,8 @@ import { getOpenAIClient } from '@/lib/openai';
 import { getServerScope } from '@/lib/scope-server';
 import { getOwnedSession, getScopeOwner, parsePositiveInt } from '@/lib/ownership';
 
+export const dynamic = "force-dynamic";
+
 const KEEP_LAST_RAW_MESSAGES = 20;
 
 export async function POST(request: NextRequest) {
@@ -176,8 +178,6 @@ Generate the digest now:`;
 
       handoffSummary = completion.choices[0]?.message?.content || '';
       
-      console.log('[ROLLOVER] Generated Session Digest with', sampledMessages.length, 'main messages +', tailBlock.length, 'tail messages');
-      
     } catch (error) {
       console.error('Error generating handoff summary:', error);
       handoffSummary = "Error generating summary. Please check the previous context.";
@@ -278,24 +278,11 @@ Generate the digest now:`;
         SET mru_ts = ?, updated_at = ?
         WHERE id = ? AND ${owner.column} = ?
       `).run(finalMruTs, finalUpdatedAt, newSessionId, owner.value);
-      
-      console.log("[ROLLOVER FINAL TOUCH] Updated session with latest MRU:", {
-        newSessionId,
-        previousMax: currentMaxMru,
-        newMru: finalMruTs,
-        updated_at: finalUpdatedAt
-      });
     } catch (error) {
       console.error('Error updating final mru_ts:', error);
     }
 
     // 8. Return new session ID
-    console.log("[ROLLOVER DEBUG] Created new session:", {
-      newSessionId,
-      mru_ts: finalMruTs,
-      timestamp: finalUpdatedAt
-    });
-    
     return NextResponse.json({
       newSessionId: newSessionId
     });

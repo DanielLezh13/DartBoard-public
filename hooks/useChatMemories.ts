@@ -448,8 +448,6 @@ export function useChatMemories() {
       const created = (await res.json()) as Memory;
       const oldId = memoryId;
       const dbId = created.id;
-      console.log("[GUEST_ID_NORMALIZE]", { oldId, dbId });
-
       setMemories((prev) =>
         prev.map((m) => (m.id === oldId ? created : m))
       );
@@ -504,10 +502,7 @@ export function useChatMemories() {
     }
     
     // For signed-in users, create in database
-    if (!scope) {
-      console.log("[MEMORY] Cannot create folders without scope");
-      return;
-    }
+    if (!scope) return;
     
     try {
       // Avoid 409s by picking a unique default name (case-insensitive)
@@ -1015,10 +1010,7 @@ export function useChatMemories() {
     }
     
     // For signed-in users, update in database
-    if (!scope) {
-      console.log("[MEMORY] Cannot save memories without scope");
-      return;
-    }
+    if (!scope) return;
     
     try {
       const updateData: any = {
@@ -1057,13 +1049,9 @@ export function useChatMemories() {
   }, [scope]);
 
   const handleMemoryRename = useCallback(async (id: number, newTitle: string) => {
-    if (!scope) {
-      console.log("[MEMORY] Cannot rename memories without scope");
-      return;
-    }
+    if (!scope) return;
 
     const scopeKind = scope.kind;
-    console.log("[MEMORY_RENAME] start", { scopeKind, memoryId: id });
 
     try {
       const memory = memories.find((m) => m.id === id) ?? memoriesByIdRef.current.get(id);
@@ -1071,7 +1059,6 @@ export function useChatMemories() {
 
       // For guest: persist to DB first (sessionStorage-only memories don't exist in DB)
       const dbId = await persistGuestMemoryToDb(id);
-      console.log("[MEMORY_RENAME] resolvedIds", { localId: id, dbId });
 
       const response = await fetch("/api/memory", {
         method: "PUT",
@@ -1082,8 +1069,6 @@ export function useChatMemories() {
           folder_name: memory.folder_name || "Unsorted",
         }),
       });
-
-      console.log("[MEMORY_RENAME] resp", { ok: response.ok, status: response.status });
 
       if (!response.ok) {
         throw new Error("Failed to rename memory");
@@ -1108,7 +1093,6 @@ export function useChatMemories() {
       }
 
       await loadMemories(memorySearchQuery, selectedMemoryFolder);
-      console.log("[MEMORY_RENAME] state-updated");
     } catch (err) {
       console.error("Error renaming memory:", err);
       throw err;
@@ -1117,10 +1101,7 @@ export function useChatMemories() {
 
   const handleMemoryDelete = useCallback(async (id: number) => {
     // Allow deleting memories in guest mode (they will be ephemeral)
-    if (!scope) {
-      console.log("[MEMORY] Cannot delete memories without scope");
-      return;
-    }
+    if (!scope) return;
     
     // Optimistically remove from state
     setMemories((prev: Memory[]) => prev.filter((m: Memory) => m.id !== id));
@@ -1154,10 +1135,7 @@ export function useChatMemories() {
 
   const handleMemoryReorder = useCallback(async (updates: Array<{ id: number; position: number | null }>) => {
     // Allow reordering memories in guest mode (they will be ephemeral)
-    if (!scope) {
-      console.log("[MEMORY] Cannot reorder memories without scope");
-      return;
-    }
+    if (!scope) return;
 
     if (updates.length === 0) return;
 
@@ -1298,10 +1276,7 @@ export function useChatMemories() {
 
   const handleFolderRename = useCallback(async (id: number, newName: string) => {
     // Allow renaming folders in guest mode (they will be ephemeral)
-    if (!scope) {
-      console.log("[MEMORY] Cannot rename folders without scope");
-      return;
-    }
+    if (!scope) return;
     
     try {
       const folder = memoryFolders.find((f) => f.id === id);
@@ -1421,14 +1396,9 @@ export function useChatMemories() {
   }, [getGuestMemoryFoldersFromStorage, selectedMemoryFolder, memoryFolders, memorySearchQuery, loadMemoryFolders, loadMemories, scope]);
 
   const handleMoveMemoryToFolder = useCallback(async (memoryId: number, folderId: number | null) => {
-    if (!scope) {
-      console.log("[MEMORY] Cannot move memories without scope");
-      return;
-    }
+    if (!scope) return;
 
     const scopeKind = scope.kind;
-    const targetLocalFolderId = folderId;
-    console.log("[MEMORY_MOVE] start", { scopeKind, memoryId, targetFolderId: folderId });
 
     try {
       const memory = memories.find((m) => m.id === memoryId) ?? memoriesByIdRef.current.get(memoryId);
@@ -1447,7 +1417,6 @@ export function useChatMemories() {
         const mapped = map[String(folderId)];
         if (mapped != null) {
           targetDbFolderId = mapped;
-          console.log("[FOLDER_ID_MAP] resolve", { localFolderId: folderId, dbFolderId: mapped });
         }
       }
 
@@ -1463,7 +1432,6 @@ export function useChatMemories() {
             const folderData = (await folderRes.json()) as { id: number };
             if (folderId !== null) {
               setFolderIdMapping(folderId, folderData.id);
-              console.log("[FOLDER_ID_MAP] resolve", { localFolderId: folderId, dbFolderId: folderData.id });
             }
             targetDbFolderId = folderData.id;
           } else if (folderRes.status === 409 && folderId !== null) {
@@ -1475,7 +1443,6 @@ export function useChatMemories() {
               if (found) {
                 setFolderIdMapping(folderId, found.id);
                 targetDbFolderId = found.id;
-                console.log("[FOLDER_ID_MAP] resolve", { localFolderId: folderId, dbFolderId: found.id });
               }
             }
           }
@@ -1486,12 +1453,6 @@ export function useChatMemories() {
 
       // For guest: persist memory to DB first (sessionStorage-only memories don't exist in DB)
       const dbMemoryId = await persistGuestMemoryToDb(memoryId);
-      console.log("[MEMORY_MOVE] usingIds", {
-        memoryLocalId: memoryId,
-        memoryDbId: dbMemoryId,
-        targetLocalFolderId,
-        targetDbFolderId,
-      });
 
       const idsToMatch = new Set<number>([memoryId, dbMemoryId]);
       const optimisticMoved: Memory = { ...(memory as any), id: dbMemoryId, folder_name: folderName, position: topPos };
@@ -1594,8 +1555,6 @@ export function useChatMemories() {
         }),
       });
 
-      console.log("[MEMORY_MOVE] response", { ok: response.ok, status: response.status });
-
       if (!response.ok) {
         throw new Error("Failed to move memory");
       }
@@ -1660,7 +1619,6 @@ export function useChatMemories() {
       if (scopeKind !== "guest") {
         await loadMemoryFolders();
       }
-      console.log("[MEMORY_MOVE] state-updated");
     } catch (err) {
       console.error("Error moving memory:", err);
       if (scopeKind !== "guest") {
@@ -1686,10 +1644,7 @@ export function useChatMemories() {
     }
     
     // For signed-in users, update in database
-    if (!scope) {
-      console.log("[MEMORY] Cannot rename folders without scope");
-      return;
-    }
+    if (!scope) return;
     
     try {
       const folder = memoryFolders.find((f) => f.id === id);
@@ -1914,10 +1869,7 @@ export function useChatMemories() {
 
   const handleCreateMemory = useCallback(async () => {
     // Allow creating memories in guest mode (they will be ephemeral)
-    if (!scope) {
-      console.log("[MEMORY] Cannot create memories without scope");
-      return;
-    }
+    if (!scope) return;
     
     try {
       const folderName = selectedMemoryFolder === "All" ? "Unsorted" : (selectedMemoryFolder || "Unsorted");

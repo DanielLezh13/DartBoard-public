@@ -1052,17 +1052,16 @@ export function RightRail({
                     setSubMenu({ open: false, kind: "icons", folderId: null, x: 0, y: 0 });
                   } else {
                     // MIRRORED: Position to LEFT of main menu
-                    setSubMenu({
-                      open: true,
-                      kind: "icons",
-                      folderId: menu.folderId,
-                      x: menuRect.left - 228 - 4, // 228px is submenu width, 4px gap
-                      y: menuRect.top + (menuRect.height / 2),
-                    });
-                    console.log("[RightRail] submenu open", { menuFolderId: menu.folderId, subMenuFolderId: menu.folderId });
-                  }
-                }
-              }}
+	                    setSubMenu({
+	                      open: true,
+	                      kind: "icons",
+	                      folderId: menu.folderId,
+	                      x: menuRect.left - 228 - 4, // 228px is submenu width, 4px gap
+	                      y: menuRect.top + (menuRect.height / 2),
+	                    });
+	                  }
+	                }
+	              }}
               type="button"
             >
               <span className="text-gray-400">‹</span>
@@ -1159,13 +1158,12 @@ export function RightRail({
                         key="folder"
                         type="button"
                         aria-pressed={currentIcon == null}
-                        className={btnBase + (currentIcon == null ? btnSelected : "")}
-                        onClick={() => {
-                          const icon: string | null = null;
-                          console.log("[RR_ICON_CLICK]", { scopeKind: scopeKind ?? undefined, folderId: subMenu.folderId, icon, hasHandler: !!onSetFolderIcon });
-                          if (onSetFolderIcon) {
-                            onSetFolderIcon(subMenu.folderId!, null);
-                          }
+	                        className={btnBase + (currentIcon == null ? btnSelected : "")}
+	                        onClick={() => {
+	                          const icon: string | null = null;
+	                          if (onSetFolderIcon) {
+	                            onSetFolderIcon(subMenu.folderId!, null);
+	                          }
                           // Don't update local state here - let the sync effect handle it from DB
                         }}
                         title="Folder"
@@ -1188,13 +1186,12 @@ export function RightRail({
                         key="heart"
                         type="button"
                         aria-pressed={currentIcon === "heart"}
-                        className={btnBase + (currentIcon === "heart" ? btnSelected : "")}
-                        onClick={() => {
-                          const icon = "heart";
-                          console.log("[RR_ICON_CLICK]", { scopeKind: scopeKind ?? undefined, folderId: subMenu.folderId, icon, hasHandler: !!onSetFolderIcon });
-                          if (onSetFolderIcon) {
-                            onSetFolderIcon(subMenu.folderId!, icon);
-                          }
+	                        className={btnBase + (currentIcon === "heart" ? btnSelected : "")}
+	                        onClick={() => {
+	                          const icon = "heart";
+	                          if (onSetFolderIcon) {
+	                            onSetFolderIcon(subMenu.folderId!, icon);
+	                          }
                           // Don't update local state here - let the sync effect handle it from DB
                         }}
                         title="Heart"
@@ -1216,13 +1213,12 @@ export function RightRail({
                         key="thumb"
                         type="button"
                         aria-pressed={currentIcon === "thumb"}
-                        className={btnBase + (currentIcon === "thumb" ? btnSelected : "")}
-                        onClick={() => {
-                          const icon = "thumb";
-                          console.log("[RR_ICON_CLICK]", { scopeKind: scopeKind ?? undefined, folderId: subMenu.folderId, icon, hasHandler: !!onSetFolderIcon });
-                          if (onSetFolderIcon) {
-                            onSetFolderIcon(subMenu.folderId!, icon);
-                          }
+	                        className={btnBase + (currentIcon === "thumb" ? btnSelected : "")}
+	                        onClick={() => {
+	                          const icon = "thumb";
+	                          if (onSetFolderIcon) {
+	                            onSetFolderIcon(subMenu.folderId!, icon);
+	                          }
                           // Don't update local state here - let the sync effect handle it from DB
                         }}
                         title="Thumbs Up"
@@ -1244,13 +1240,12 @@ export function RightRail({
                         key="user"
                         type="button"
                         aria-pressed={currentIcon === "user"}
-                        className={btnBase + (currentIcon === "user" ? btnSelected : "")}
-                        onClick={() => {
-                          const icon = "user";
-                          console.log("[RR_ICON_CLICK]", { scopeKind: scopeKind ?? undefined, folderId: subMenu.folderId, icon, hasHandler: !!onSetFolderIcon });
-                          if (onSetFolderIcon) {
-                            onSetFolderIcon(subMenu.folderId!, icon);
-                          }
+	                        className={btnBase + (currentIcon === "user" ? btnSelected : "")}
+	                        onClick={() => {
+	                          const icon = "user";
+	                          if (onSetFolderIcon) {
+	                            onSetFolderIcon(subMenu.folderId!, icon);
+	                          }
                           // Don't update local state here - let the sync effect handle it from DB
                         }}
                         title="User"
@@ -1273,13 +1268,12 @@ export function RightRail({
                         key="pin"
                         type="button"
                         aria-pressed={currentIcon === "pin"}
-                        className={btnBase + (currentIcon === "pin" ? btnSelected : "")}
-                        onClick={() => {
-                          const icon = "pin";
-                          console.log("[RR_ICON_CLICK]", { scopeKind: scopeKind ?? undefined, folderId: subMenu.folderId, icon, hasHandler: !!onSetFolderIcon });
-                          if (onSetFolderIcon) {
-                            onSetFolderIcon(subMenu.folderId!, icon);
-                          }
+	                        className={btnBase + (currentIcon === "pin" ? btnSelected : "")}
+	                        onClick={() => {
+	                          const icon = "pin";
+	                          if (onSetFolderIcon) {
+	                            onSetFolderIcon(subMenu.folderId!, icon);
+	                          }
                           // Don't update local state here - let the sync effect handle it from DB
                         }}
                         title="Pin"
@@ -1301,13 +1295,12 @@ export function RightRail({
                         key="build"
                         type="button"
                         aria-pressed={currentIcon === "build"}
-                        className={btnBase + (currentIcon === "build" ? btnSelected : "")}
-                        onClick={() => {
-                          const icon = "build";
-                          console.log("[RR_ICON_CLICK]", { scopeKind: scopeKind ?? undefined, folderId: subMenu.folderId, icon, hasHandler: !!onSetFolderIcon });
-                          if (onSetFolderIcon) {
-                            onSetFolderIcon(subMenu.folderId!, icon);
-                          }
+	                        className={btnBase + (currentIcon === "build" ? btnSelected : "")}
+	                        onClick={() => {
+	                          const icon = "build";
+	                          if (onSetFolderIcon) {
+	                            onSetFolderIcon(subMenu.folderId!, icon);
+	                          }
                           // Don't update local state here - let the sync effect handle it from DB
                         }}
                         title="Build"
@@ -1330,13 +1323,12 @@ export function RightRail({
                         key="code"
                         type="button"
                         aria-pressed={currentIcon === "code"}
-                        className={btnBase + (currentIcon === "code" ? btnSelected : "")}
-                        onClick={() => {
-                          const icon = "code";
-                          console.log("[RR_ICON_CLICK]", { scopeKind: scopeKind ?? undefined, folderId: subMenu.folderId, icon, hasHandler: !!onSetFolderIcon });
-                          if (onSetFolderIcon) {
-                            onSetFolderIcon(subMenu.folderId!, icon);
-                          }
+	                        className={btnBase + (currentIcon === "code" ? btnSelected : "")}
+	                        onClick={() => {
+	                          const icon = "code";
+	                          if (onSetFolderIcon) {
+	                            onSetFolderIcon(subMenu.folderId!, icon);
+	                          }
                           // Don't update local state here - let the sync effect handle it from DB
                         }}
                         title="Code"
@@ -1360,13 +1352,12 @@ export function RightRail({
                         key="cog"
                         type="button"
                         aria-pressed={currentIcon === "cog"}
-                        className={btnBase + (currentIcon === "cog" ? btnSelected : "")}
-                        onClick={() => {
-                          const icon = "cog";
-                          console.log("[RR_ICON_CLICK]", { scopeKind: scopeKind ?? undefined, folderId: subMenu.folderId, icon, hasHandler: !!onSetFolderIcon });
-                          if (onSetFolderIcon) {
-                            onSetFolderIcon(subMenu.folderId!, icon);
-                          }
+	                        className={btnBase + (currentIcon === "cog" ? btnSelected : "")}
+	                        onClick={() => {
+	                          const icon = "cog";
+	                          if (onSetFolderIcon) {
+	                            onSetFolderIcon(subMenu.folderId!, icon);
+	                          }
                           // Don't update local state here - let the sync effect handle it from DB
                         }}
                         title="Settings"

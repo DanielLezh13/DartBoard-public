@@ -5,6 +5,8 @@ import { estimateTokens } from "@/lib/tokenEstimate";
 import { getOwnedMemory, getScopeOwner, parsePositiveInt } from "@/lib/ownership";
 import { getScopePlanLimits } from "@/lib/plan";
 
+export const dynamic = "force-dynamic";
+
 async function assertScope(request: NextRequest) {
   try {
     return await getServerScope(request);

@@ -11,5 +11,3 @@ export const createClient = () => {
   }
   return supabaseInstance
 }
-
-export const supabase = createClient()

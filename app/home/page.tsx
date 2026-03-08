@@ -1,10 +1,10 @@
-import MarketingPage from "../(marketing)/page";
+import { DartBoardLanding } from "@/components/marketing/DartBoardLanding";
 
 export default function HomePage() {
   return (
     <>
       <div data-db-home-embedded="true">
-        <MarketingPage />
+        <DartBoardLanding />
       </div>
       <style
         dangerouslySetInnerHTML={{

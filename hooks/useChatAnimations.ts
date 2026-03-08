@@ -113,11 +113,8 @@ export function useChatAnimationsEffects<TMessage>(args: {
 
   // Load messages when session changes (smooth switching without empty flash)
   useEffect(() => {
-    const from = prevSessionIdRef.current;
+    const prevSessionId = prevSessionIdRef.current;
     const to = activeSessionId;
-    if (to != null) {
-      console.log("[SESSION_SWITCH] start", { from, to, scopeKind: scopeKind ?? undefined });
-    }
     prevSessionIdRef.current = to;
 
     resetRevealStateRef.current();
@@ -125,7 +122,6 @@ export function useChatAnimationsEffects<TMessage>(args: {
     if (activeSessionId) {
       // Check skip flag BEFORE doing anything else
       if (skipNextSessionFetchRef.current) {
-        console.log('[Animations] Skipping session fetch due to flag');
         skipNextSessionFetchRef.current = false;
         setIsChatSwitching(false);
         setIsChatEntering(false);
@@ -140,7 +136,7 @@ export function useChatAnimationsEffects<TMessage>(args: {
       const isFastInitialRestore =
         fastInitialRestore &&
         !consumedFastInitialRestoreRef.current &&
-        from == null;
+        prevSessionId == null;
       if (isFastInitialRestore) {
         consumedFastInitialRestoreRef.current = true;
       }
@@ -151,13 +147,7 @@ export function useChatAnimationsEffects<TMessage>(args: {
       fetchMessagesRef.current(activeSessionId).then((chatMessages) => {
         if (switchSeqRef.current !== currentSeq) return;
 
-        console.log("[SESSION_SWITCH] loadMessages done", { count: chatMessages.length });
-
         if (isFastInitialRestore) {
-          console.log("[SESSION_SWITCH] setMessages", {
-            reason: "fast-initial-restore",
-            count: chatMessages.length,
-          });
           setMessagesRef.current(chatMessages);
           pendingCommitScrollToBottomRef.current = true;
           resetRevealStateRef.current();
@@ -182,7 +172,6 @@ export function useChatAnimationsEffects<TMessage>(args: {
           window.setTimeout(() => {
             if (switchSeqRef.current !== currentSeq) return;
 
-            console.log("[SESSION_SWITCH] setMessages", { reason: "animation-swap", count: chatMessages.length });
             setMessagesRef.current(chatMessages);
             pendingCommitScrollToBottomRef.current = true;
             resetRevealStateRef.current();
@@ -210,7 +199,6 @@ export function useChatAnimationsEffects<TMessage>(args: {
       // Without this, a late timeout can fire after "New Chat" and cause a brief blink/double-fade.
       switchSeqRef.current += 1;
 
-      console.log("[SESSION_SWITCH] setMessages", { reason: "landing", count: 0 });
       setMessagesRef.current([]);
       setIsChatSwitching(false);
       setIsChatEntering(false);
@@ -231,4 +219,3 @@ export function useChatAnimationsEffects<TMessage>(args: {
     setEnterOpacity(1);
   }, [memoryOverlayOpen]);
 }
-

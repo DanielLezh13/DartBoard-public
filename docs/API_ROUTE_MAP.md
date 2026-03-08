@@ -29,7 +29,7 @@ This is a high-signal map of the main route groups used in DartBoard.
 
 ## Uploads and Utility
 
-- `/api/upload/image` - authenticated image upload with byte-signature validation.
+- `/api/upload/image` - authenticated image upload with byte-signature validation and private file serving.
 - `/api/title` - title generation.
 - `/api/summarize` - summarization helper.
 
@@ -42,3 +42,4 @@ This is a high-signal map of the main route groups used in DartBoard.
 ## Deprecated/Disabled
 
 - `/api/documents/*`, `/api/doc-assistant`, `/api/doc-chat-messages` currently return `410` in this build.
+- `/api/chat-debug` is disabled in this build.

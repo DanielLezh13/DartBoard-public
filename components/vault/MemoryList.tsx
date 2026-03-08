@@ -549,21 +549,12 @@ export default function MemoryList({
     !searchQuery.trim();
   const showLoading = isLoading && renderMemories.length === 0 && !treatKnownEmptyAsLoaded;
 
-  // Dev-only: after a drop, log the memory's resolved folder_name once from the render path.
   useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
     if (typeof window === "undefined") return;
     const marker = (window as any).__db_lastMovedMemory as { id: number; folderId: number | null; folderName: string } | undefined;
     if (!marker) return;
-    const found = memories.find((m) => m.id === marker.id);
-    console.log("[memories] render after move", {
-      id: marker.id,
-      expectedFolderName: marker.folderName,
-      renderedFolderName: found?.folder_name ?? null,
-      selectedFolder,
-    });
     delete (window as any).__db_lastMovedMemory;
-  }, [memories, selectedFolder]);
+  }, [memories]);
 
   const handleOpenMemoryActions = (memoryId: number) => {
     setOpenMemoryActionsId(memoryId);
@@ -584,7 +575,6 @@ export default function MemoryList({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            console.log('[NewMemory click]', { activeFolderId: selectedFolder, activeFolderName: selectedFolder });
             onImportClick(selectedFolder);
           }}
           className={

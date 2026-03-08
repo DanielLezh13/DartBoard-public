@@ -18,8 +18,6 @@ import { getUserProfile } from "@/lib/db";
 import { getModeSpec, DartzModeId } from "@/lib/modes";
 import { LYNX_KERNEL } from "@/lib/runtimeLaws";
 import { getConfig } from "@/lib/config";
-import { MAX_MEMORY_CONTENT_TOKENS, MAX_MEMORY_TOKENS_TOTAL } from "@/lib/limits";
-import { estimateTokens } from "@/lib/tokenEstimate";
 import Database from "better-sqlite3";
 
 export interface BootSequenceOptions {
@@ -462,21 +460,16 @@ function loadAttachedMemoriesContext(
     .filter((m): m is NonNullable<typeof m> => m !== undefined)
     .map((mem) => {
       injectedIds.push(mem.id);
-      const importanceStr = mem.importance ? `[importance ${mem.importance}]` : "";
-      const titleStr = mem.title ? `${mem.title}: ` : "";
-      
+
       // Use content if available, otherwise fall back to summary
       const textToInject = mem.content || mem.summary;
-      
+
       // NO LONGER TRUNCATE - inject full content as saved
       // (Size is enforced at save time with MAX_MEMORY_SAVE_TOKENS)
-      
+
       return `- [${mem.title || 'Untitled'}] ${textToInject}`;
     });
 
-  const totalTokens = memoryLines.reduce((sum, line) => sum + estimateTokens(line), 0);
-  console.log("[MEM_INJECT] count=" + memoryLines.length + " totalTokens=" + totalTokens + " cap=" + MAX_MEMORY_TOKENS_TOTAL);
-  
   // Report the actual injected IDs
   onInjectedMemoryIds?.(injectedIds);
   
