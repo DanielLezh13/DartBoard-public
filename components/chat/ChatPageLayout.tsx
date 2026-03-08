@@ -1,5 +1,4 @@
 "use client";
-// @ts-nocheck
 
 import React, { useCallback, useState } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
@@ -22,7 +21,7 @@ import { BrandHeading } from "@/components/ui/BrandHeading";
 import { DebugHUD } from "@/components/chat/DebugHUD";
 import { FancyGlowingModeButton } from "@/components/chat/FancyGlowingModeButton";
 import { getModeSpec, DARTZ_MODES } from "@/lib/modes";
-import { FolderRail, FolderBubbleIconContent, type Folder as SidebarFolder, type Session as SidebarSession } from "@/components/chat/FolderRail";
+import { FolderRail, FolderBubbleIconContent } from "@/components/chat/FolderRail";
 import { DefaultFolderIcon } from "@/components/icons/DefaultFolderIcon";
 import { ChatNavigator } from "@/components/chat/ChatNavigator";
 import { RightDock } from "@/components/chat/RightDock";
@@ -35,6 +34,8 @@ import { PricingModal } from "@/components/chat/PricingModal";
 import type { Memory } from "@/hooks/useChatMemories";
 import { getLastUserId } from "@/lib/railCache";
 import { PLAN_LIMITS } from "@/lib/planLimits";
+
+type ChatPageLayoutProps = Record<string, any>;
 
 const DND_AUTO_SCROLL_OPTIONS = {
   // Default threshold is 0.2; tighten Y so edge-scroll starts closer to top/bottom.
@@ -55,7 +56,7 @@ const LazyProfileView: any = dynamic(
 
 // Extract the JSX return statement from page.tsx (lines 2258-3541)
 // This component accepts all variables used in the JSX as props
-export function ChatPageLayout(props: any) {
+export function ChatPageLayout(props: ChatPageLayoutProps) {
   // Destructure all props
   const {
     hasMounted,
