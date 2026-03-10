@@ -377,6 +377,7 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
   const effectiveIsLanding = forceLanding ? true : isLanding;
   const effectiveStageForRender = forceLanding ? (stageForRender ?? 0) : stageForRender;
   const shouldMountLanding = forceLanding || (showLandingHeader && !suppressLanding);
+  const landingLogoShiftPx = (effectiveStageForRender ?? 0) >= 2 ? 228 : 0;
 
   // Hydration gate: disable animations during initial render and on tab resume
   const [uiHydrating, setUiHydrating] = React.useState(true);
@@ -1234,12 +1235,14 @@ export function ChatPageLayout(props: ChatPageLayoutProps) {
                 <div
                   className={
                     landingFadeOut && !forceLanding
-                      ? `absolute ${effectiveStageForRender >= 2 ? "-translate-x-[204px]" : "translate-x-0"}` // freeze position; inherit opacity from parent
-                      : "absolute transition-all duration-500 ease-out " +
-                        (effectiveStageForRender >= 1 ? "opacity-100" : "opacity-0") +
-                        (effectiveStageForRender >= 2 ? " -translate-x-[204px]" : " translate-x-0")
+                      ? "absolute left-1/2 top-1/2" // freeze position; inherit opacity from parent
+                      : "absolute left-1/2 top-1/2 transition-all duration-500 ease-out " +
+                        (effectiveStageForRender >= 1 ? "opacity-100" : "opacity-0")
                   }
-                  style={landingFadeOut && !forceLanding ? { transition: "none", willChange: "auto" } : undefined}
+                  style={{
+                    transform: `translate(calc(-50% - ${landingLogoShiftPx}px), -50%)`,
+                    ...(landingFadeOut && !forceLanding ? { transition: "none", willChange: "auto" } : undefined),
+                  }}
                 >
                   <img
                     src="/dartz-icon.png"
