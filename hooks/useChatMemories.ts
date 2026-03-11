@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { getAuthHeaders } from "@/lib/api";
-import { clearGuestSessionStorage, getFolderIdMap, setFolderIdMapping } from "@/lib/guest-keys";
+import { clearGuestSessionStorage } from "@/lib/guest-keys";
 import {
   getLastUserId,
   getUserMemoryFoldersCacheKey,
@@ -1410,48 +1410,38 @@ export function useChatMemories() {
       // even if the destination folder already has other memories at -1 (ties break by created_at).
       const topPos = -(Date.now() * 1000 + Math.floor(Math.random() * 1000));
 
-      // For guest: resolve target folder DB id from map (local id -> db id)
-      let targetDbFolderId: number | null = folderId;
-      if (scopeKind === "guest" && folderId !== null) {
-        const map = getFolderIdMap();
-        const mapped = map[String(folderId)];
-        if (mapped != null) {
-          targetDbFolderId = mapped;
-        }
-      }
+      if (scopeKind === "guest") {
+        const movedMemory: Memory = {
+          ...(memory as any),
+          id: memoryId,
+          folder_name: folderName,
+          position: topPos,
+        };
 
-      // For guest: ensure target folder exists in DB and save mapping when created
-      if (scopeKind === "guest" && folderName !== "Unsorted") {
-        try {
-          const folderRes = await fetch("/api/memory/folders", {
-            method: "POST",
-            headers: getAuthHeaders(),
-            body: JSON.stringify({ folder_name: folderName }),
-          });
-          if (folderRes.ok) {
-            const folderData = (await folderRes.json()) as { id: number };
-            if (folderId !== null) {
-              setFolderIdMapping(folderId, folderData.id);
-            }
-            targetDbFolderId = folderData.id;
-          } else if (folderRes.status === 409 && folderId !== null) {
-            // Folder exists - fetch to get db id and save mapping
-            const foldersRes = await fetch(`/api/memory/folders?ts=${Date.now()}`, { headers: getAuthHeaders() });
-            if (foldersRes.ok) {
-              const { folders } = (await foldersRes.json()) as { folders: Array<{ id: number; name: string }> };
-              const found = folders.find((f) => f.name.toLowerCase() === folderName.toLowerCase());
-              if (found) {
-                setFolderIdMapping(folderId, found.id);
-                targetDbFolderId = found.id;
-              }
-            }
+        const moveInList = (list: Memory[]) => {
+          const withoutMoved = list.filter((m) => m.id !== memoryId);
+          return sortMemoriesForDisplay([movedMemory, ...withoutMoved]);
+        };
+
+        setMemories((prev) => moveInList(prev));
+
+        if (typeof window !== "undefined") {
+          try {
+            const stored = sessionStorage.getItem("db:guestMemories");
+            const list = stored ? (JSON.parse(stored) as Memory[]) : [];
+            sessionStorage.setItem("db:guestMemories", JSON.stringify(moveInList(list)));
+          } catch {
+            // ignore guest cache write errors
           }
-        } catch {
-          // Ignore - PUT may still succeed
         }
+
+        memoriesByIdRef.current.set(memoryId, movedMemory);
+        memoriesByFolderKeyRef.current.delete("__ALL__");
+        memoriesByFolderKeyRef.current.delete(prevFolderName);
+        memoriesByFolderKeyRef.current.delete(folderName);
+        return;
       }
 
-      // For guest: persist memory to DB first (sessionStorage-only memories don't exist in DB)
       const dbMemoryId = await persistGuestMemoryToDb(memoryId);
 
       const idsToMatch = new Set<number>([memoryId, dbMemoryId]);
@@ -1567,40 +1557,6 @@ export function useChatMemories() {
         // ignore
       }
 
-      if (scopeKind === "guest") {
-        // Guest: update local state and sessionStorage only; do NOT call loadMemories/loadMemoryFolders
-        const prevFolderName = memory.folder_name || "Unsorted";
-        const merged = { ...updatedMemory, id: dbMemoryId, position: topPos };
-        try {
-          const stored = sessionStorage.getItem("db:guestMemories");
-          const list = stored ? JSON.parse(stored) : [];
-          // Replace in-place: match by dbId OR old id; dedupe by id so we never have two entries
-          const replaced = list.map((m: Memory) =>
-            m.id === dbMemoryId || m.id === memoryId ? merged : m
-          );
-          const deduped = replaced.filter(
-            (m: Memory, i: number) => replaced.findIndex((x: Memory) => x.id === m.id) === i
-          );
-          sessionStorage.setItem("db:guestMemories", JSON.stringify(deduped));
-          setMemories((prev) => {
-            const replacedPrev = prev.map((m) =>
-              m.id === dbMemoryId || m.id === memoryId ? merged : m
-            );
-            return replacedPrev.filter(
-              (m, i) => replacedPrev.findIndex((x) => x.id === m.id) === i
-            );
-          });
-          memoriesByIdRef.current.delete(memoryId);
-          memoriesByIdRef.current.set(dbMemoryId, merged);
-          // Invalidate folder cache so Unfiltered/folder views reflect the move
-          memoriesByFolderKeyRef.current.delete("__ALL__");
-          memoriesByFolderKeyRef.current.delete(prevFolderName);
-          memoriesByFolderKeyRef.current.delete(folderName);
-        } catch {
-          // ignore
-        }
-      }
-
       // After moving, set position to -1 to put it at the top of the destination folder
       try {
         await fetch("/api/memory", {
@@ -1614,17 +1570,13 @@ export function useChatMemories() {
         console.error("Error setting moved memory position:", posErr);
       }
 
-      // Signed-in only: refresh folder counts; avoid reloading the current folder list here because
+      // Refresh folder counts; avoid reloading the current folder list here because
       // it can block an immediate folder switch fetch and make the destination look "stale" until the next toggle.
-      if (scopeKind !== "guest") {
-        await loadMemoryFolders();
-      }
+      await loadMemoryFolders();
     } catch (err) {
       console.error("Error moving memory:", err);
-      if (scopeKind !== "guest") {
-        await loadMemories(memorySearchQuery, selectedMemoryFolder);
-        await loadMemoryFolders();
-      }
+      await loadMemories(memorySearchQuery, selectedMemoryFolder);
+      await loadMemoryFolders();
     }
   }, [memories, memoryFolders, memorySearchQuery, selectedMemoryFolder, loadMemories, loadMemoryFolders, scope, persistGuestMemoryToDb]);
 
