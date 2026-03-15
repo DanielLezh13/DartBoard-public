@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { getScopePlan } from "@/lib/plan";
 import { getServerScope } from "@/lib/scope-server";
 import { enforceApiRateLimit } from "@/lib/rateLimit";
 
@@ -236,14 +237,17 @@ export async function GET(request: NextRequest) {
     }
 
     const db = getDb();
-    const rateLimited = enforceApiRateLimit({
-      db,
-      request,
-      route: { routeKey: "/api/archive/search", limit: 40, windowMs: 60 * 1000 },
-      scope,
-    });
-    if (rateLimited) {
-      return rateLimited;
+    const plan = getScopePlan(db, scope);
+    if (plan !== "plus") {
+      const rateLimited = enforceApiRateLimit({
+        db,
+        request,
+        route: { routeKey: "/api/archive/search", limit: 40, windowMs: 60 * 1000 },
+        scope,
+      });
+      if (rateLimited) {
+        return rateLimited;
+      }
     }
 
     if (statsOnly) {

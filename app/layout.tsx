@@ -31,7 +31,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: initThemeScript }} />
       </head>
-      <body className="antialiased bg-transparent">
+      <body className="bg-background text-foreground antialiased">
         <ClientLayoutWrapper>{children}</ClientLayoutWrapper>
       </body>
     </html>

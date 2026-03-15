@@ -35,7 +35,7 @@ export function ClientLayoutWrapper({
 
   return (
     <AuthEpochProvider value={authEpoch}>
-      <div id="db-theme-root">
+      <div id="db-theme-root" className="min-h-screen bg-background">
         <AuthBridge onAuthBoundary={() => setAuthEpoch((e) => e + 1)} />
         {children}
       </div>

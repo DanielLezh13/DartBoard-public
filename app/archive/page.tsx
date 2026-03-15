@@ -26,12 +26,15 @@ import { useScope } from "../../hooks/useScope";
 
 // Enhanced glass-morphism card styles matching v2 mockup exactly
 const archiveCardStyles = {
-  base: "group relative overflow-hidden rounded-xl border border-blue-500/30 bg-card/60 p-6 shadow-none backdrop-blur-md transition-all duration-300",
+  base: "group relative isolate overflow-hidden rounded-xl border border-blue-500/30 bg-card/60 p-6 shadow-none backdrop-blur-md transition-all duration-300",
   inner: "bg-card/40 border border-blue-500/20 rounded-lg backdrop-blur-sm",
   warning: "bg-warning/10 border border-warning/50 rounded-xl p-3 backdrop-blur-sm",
   button: "inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 hover:border-blue-400/40 rounded-lg font-medium text-blue-400 hover:text-blue-300 transition-all duration-200",
   destructive: "px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 hover:border-red-400/40 text-red-400 hover:text-red-300 rounded transition-colors",
 };
+
+const archiveMessageCardBase =
+  "group relative isolate overflow-hidden rounded-xl border p-6 shadow-none transition-[border-color,box-shadow,background-color] duration-200";
 
 function cleanMessageText(text: string) {
   return stripExportArtifacts(text || "");
@@ -287,6 +290,7 @@ function ArchivePageInner() {
   // Get current page messages (0-based indexing)
   const safePageIndex = Math.max(0, Math.min(currentPage, pages.length - 1));
   const messagesOnPage = pages[safePageIndex] || [];
+  const activePageIndex = safePageIndex;
 
   const getEntranceStyle = (
     isVisible: boolean,
@@ -294,10 +298,131 @@ function ArchivePageInner() {
     startY = -12
   ): React.CSSProperties => ({
     opacity: isVisible ? 1 : 0,
-    transform: `translateY(${isVisible ? 0 : startY}px)`,
+    transform: isVisible ? "none" : `translateY(${startY}px)`,
     transition: `opacity 360ms cubic-bezier(0.22, 1, 0.36, 1) ${delayMs}ms, transform 460ms cubic-bezier(0.22, 1, 0.36, 1) ${delayMs}ms`,
-    willChange: "opacity, transform",
+    willChange: isVisible ? undefined : "opacity, transform",
   });
+
+  const totalPages = pages.length;
+  const maxVisiblePages = 5;
+  const paginationPageNumbers: (number | string)[] = [];
+  const currentPageNum = activePageIndex + 1;
+
+  if (totalPages <= maxVisiblePages) {
+    for (let i = 1; i <= totalPages; i++) {
+      paginationPageNumbers.push(i);
+    }
+  } else if (currentPageNum <= 3) {
+    for (let i = 1; i <= 5; i++) {
+      paginationPageNumbers.push(i);
+    }
+    paginationPageNumbers.push("...");
+    paginationPageNumbers.push(totalPages);
+  } else if (currentPageNum >= totalPages - 2) {
+    paginationPageNumbers.push(1);
+    paginationPageNumbers.push("...");
+    for (let i = totalPages - 4; i <= totalPages; i++) {
+      paginationPageNumbers.push(i);
+    }
+  } else {
+    paginationPageNumbers.push(1);
+    paginationPageNumbers.push("...");
+    for (let i = currentPageNum - 2; i <= currentPageNum + 2; i++) {
+      paginationPageNumbers.push(i);
+    }
+    paginationPageNumbers.push("...");
+    paginationPageNumbers.push(totalPages);
+  }
+
+  const renderPaginationControls = (placement: "top" | "bottom") => {
+    if (totalPages <= 1) {
+      return null;
+    }
+
+    return (
+      <div
+        className={
+          placement === "top"
+            ? "flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 shadow-[0_10px_28px_rgba(0,0,0,0.18)]"
+            : "flex items-center justify-center gap-2 border-t border-gray-700 pt-4"
+        }
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const newPage = activePageIndex - 1;
+            if (newPage >= 0) {
+              setCurrentPage(newPage);
+            }
+          }}
+          disabled={activePageIndex === 0 || loading}
+          className="rounded bg-gray-700 px-3 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-600 disabled:cursor-default disabled:opacity-50"
+        >
+          ← Previous
+        </button>
+
+        <div className="flex items-center gap-1">
+          {paginationPageNumbers.map((page, index) => {
+            if (page === "...") {
+              return (
+                <span key={`ellipsis-${placement}-${index}`} className="px-2 text-gray-500">
+                  ...
+                </span>
+              );
+            }
+
+            const pageNum = page as number;
+            const pageIndex = pageNum - 1;
+            const isCurrentPage = pageIndex === activePageIndex;
+
+            return (
+              <button
+                key={`${placement}-${pageNum}`}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (pageIndex !== activePageIndex && !loading) {
+                    setCurrentPage(pageIndex);
+                  }
+                }}
+                disabled={loading}
+                className={`min-w-[2.5rem] rounded px-3 py-2 text-sm transition-colors ${
+                  isCurrentPage
+                    ? "bg-blue-600 font-semibold text-white"
+                    : "bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:cursor-default disabled:opacity-50"
+                }`}
+              >
+                {pageNum}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const newPage = activePageIndex + 1;
+            if (newPage < totalPages) {
+              setCurrentPage(newPage);
+            }
+          }}
+          disabled={activePageIndex >= totalPages - 1 || loading}
+          className="rounded bg-gray-700 px-3 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-600 disabled:cursor-default disabled:opacity-50"
+        >
+          Next →
+        </button>
+
+        <span className="ml-4 text-xs text-gray-500">
+          Page {currentPageNum} of {totalPages} ({totalResults.toLocaleString()} total)
+        </span>
+      </div>
+    );
+  };
 
   // Clamp currentPage when pages.length changes (e.g., after filter change)
   useEffect(() => {
@@ -2054,7 +2179,7 @@ function ArchivePageInner() {
         key={`${options.variant}-${message.id}`}
         id={elementId}
         ref={isHighlighted && options.variant === "context" ? highlightedMessageRef : null}
-        className={`group relative ${archiveCardStyles.base} ${cardToneClass} transition-all duration-200 ${
+        className={`${archiveMessageCardBase} ${cardToneClass} ${
           isHighlighted
             ? "border-blue-500 shadow-lg shadow-blue-500/30"
             : ""
@@ -2334,7 +2459,7 @@ function ArchivePageInner() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1">
           <div className="mx-auto max-w-[1100px] px-6 py-8">
             <div className="space-y-6">
         {/* Import Section - matching v2 ImportCard design exactly */}
@@ -3103,7 +3228,9 @@ function ArchivePageInner() {
 
         {/* Results */}
         {showArchiveContent && (
-        <div className="space-y-4" style={getEntranceStyle(showLowerReveal, 180)}>
+        <div className="space-y-4 isolate" style={getEntranceStyle(showLowerReveal, 180)}>
+          {renderPaginationControls("top")}
+
           {(!allFilteredResults || allFilteredResults.length === 0) && !loading && (
             <div className="text-center text-gray-500 py-12">
               {searchQuery || searchTags.length > 0 || roleFilter || sourceFilter || selectedDates.length > 0
@@ -3247,132 +3374,7 @@ function ArchivePageInner() {
             document.body
           )}
           
-          {/* Pagination Controls */}
-          {pages.length > 1 && (() => {
-            const totalPages = pages.length;
-            const maxVisiblePages = 5;
-            
-            // Calculate which page numbers to show (1-based for display)
-            const getPageNumbers = () => {
-              const pageNumbers: (number | string)[] = [];
-              const currentPageNum = currentPage + 1; // Convert to 1-based for display
-              
-              if (totalPages <= maxVisiblePages) {
-                // Show all pages if total is small
-                for (let i = 1; i <= totalPages; i++) {
-                  pageNumbers.push(i);
-                }
-              } else {
-                // Show pages around current page
-                if (currentPageNum <= 3) {
-                  // Near start: show 1-5
-                  for (let i = 1; i <= 5; i++) {
-                    pageNumbers.push(i);
-                  }
-                  pageNumbers.push("...");
-                  pageNumbers.push(totalPages);
-                } else if (currentPageNum >= totalPages - 2) {
-                  // Near end: show last 5
-                  pageNumbers.push(1);
-                  pageNumbers.push("...");
-                  for (let i = totalPages - 4; i <= totalPages; i++) {
-                    pageNumbers.push(i);
-                  }
-                } else {
-                  // Middle: show current ± 2
-                  pageNumbers.push(1);
-                  pageNumbers.push("...");
-                  for (let i = currentPageNum - 2; i <= currentPageNum + 2; i++) {
-                    pageNumbers.push(i);
-                  }
-                  pageNumbers.push("...");
-                  pageNumbers.push(totalPages);
-                }
-              }
-              
-              return pageNumbers;
-            };
-            
-            const pageNumbers = getPageNumbers();
-            
-            return (
-              <div className="flex items-center justify-center gap-2 mt-6 pt-4 border-t border-gray-700">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const newPage = currentPage - 1;
-                    if (newPage >= 0) {
-                      setCurrentPage(newPage);
-                    }
-                  }}
-                  disabled={currentPage === 0 || loading}
-                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-default text-gray-200 rounded transition-colors text-sm"
-                >
-                  ← Previous
-                </button>
-                
-                <div className="flex items-center gap-1">
-                  {pageNumbers.map((page, index) => {
-                    if (page === "...") {
-                      return (
-                        <span key={`ellipsis-${index}`} className="px-2 text-gray-500">
-                          ...
-                        </span>
-                      );
-                    }
-                    
-                    const pageNum = page as number;
-                    const pageIndex = pageNum - 1; // Convert to 0-based index
-                    const isCurrentPage = pageIndex === currentPage;
-                    
-                    return (
-                      <button
-                        key={pageNum}
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (pageIndex !== currentPage && !loading) {
-                            setCurrentPage(pageIndex);
-                          }
-                        }}
-                        disabled={loading}
-                        className={`min-w-[2.5rem] px-3 py-2 rounded transition-colors text-sm ${
-                          isCurrentPage
-                            ? "bg-blue-600 text-white font-semibold"
-                            : "bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50 disabled:cursor-default"
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                </div>
-                
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const newPage = currentPage + 1;
-                    if (newPage < totalPages) {
-                      setCurrentPage(newPage);
-                    }
-                  }}
-                  disabled={currentPage >= totalPages - 1 || loading}
-                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-default text-gray-200 rounded transition-colors text-sm"
-                >
-                  Next →
-                </button>
-                
-                <span className="ml-4 text-xs text-gray-500">
-                  ({totalResults.toLocaleString()} total)
-                </span>
-              </div>
-            );
-          })()}
+          {renderPaginationControls("bottom")}
         </div>
         )}
 

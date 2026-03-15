@@ -103,7 +103,6 @@
   /* Prevent white overscroll background */
   html, body {
     overscroll-behavior: none;
-    background-attachment: fixed;
   }
 
   /* Keep disabled UI non-interactive without forcing the "blocked" cursor glyph. */
@@ -129,6 +128,7 @@
 
   #db-theme-root {
     min-height: 100vh;
+    background-color: var(--background);
     filter: var(--db-ui-theme-filter);
     transition: filter 240ms ease;
   }
