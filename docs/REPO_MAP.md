@@ -62,4 +62,4 @@ This file is a quick orientation guide for reviewers.
 - Start with `README.md`, then this file.
 - For product depth, read `app/chat/page.tsx`, `app/archive/page.tsx`, and `lib/LYNX_BOOT_SEQUENCE.ts`.
 - For operational quality, inspect `.github/workflows/ship-gate.yml`, `middleware.ts`, `lib/rateLimit.ts`, and `app/api/upload/image/route.ts`.
-- For QA/behavior intent, read `docs/MANUAL_QA_SCRIPT.md`, `README-chat-invariants.md`, and `docs/AUTH_TRANSITION_TEST_MATRIX.md`.
+- For QA/behavior intent, read `docs/MANUAL_QA_SCRIPT.md`, `docs/internal/chat-invariants.md`, and `docs/AUTH_TRANSITION_TEST_MATRIX.md`.

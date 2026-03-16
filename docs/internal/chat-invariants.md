@@ -38,8 +38,8 @@ Any change that violates them is a regression.
 
 ## Manual Regression Checklist (2 minutes)
 
-1. New chat → send message → pinned at bottom.
-2. Long list reply → pinned to true bottom.
-3. Scroll up during reveal → detaches (no fighting).
-4. Reattach action → snaps cleanly to bottom.
-5. Enter search → exit search → deterministic bottom, no jump.
+1. New chat -> send message -> pinned at bottom.
+2. Long list reply -> pinned to true bottom.
+3. Scroll up during reveal -> detaches (no fighting).
+4. Reattach action -> snaps cleanly to bottom.
+5. Enter search -> exit search -> deterministic bottom, no jump.
