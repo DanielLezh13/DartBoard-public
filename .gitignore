@@ -51,6 +51,11 @@ data.db
 *.bak
 *.backup
 
+# editor / agent metadata
+.codex/
+.windsurf/
+.cursorrules
+
 # private uploads
 /storage/uploads/
 
