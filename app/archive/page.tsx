@@ -1,26 +1,26 @@
 "use client";
 
-import React, { Suspense, useState, useRef, useMemo, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useRef, useMemo, useEffect, useCallback, useDeferredValue } from "react";
 import { createPortal } from "react-dom";
 import { Upload, ChevronDown, ChevronUp, Search, X, Calendar, MessageSquare, Zap, Archive, Clock, Filter, Plus, FolderOpen, Tag, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
 import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import { CopyIcon } from "@/components/icons/CopyIcon";
-import { CheckIcon } from "@/components/icons/CheckIcon";
-import { VaultIcon } from "@/components/icons/VaultIcon";
-import { ContextIcon } from "@/components/icons/ContextIcon";
 import { DefaultFolderIcon } from "@/components/icons/DefaultFolderIcon";
 import VaultModal from "@/components/VaultModal";
+import ArchiveMessageCard from "@/components/archive/ArchiveMessageCard";
+import ArchivePaginationControls from "@/components/archive/ArchivePaginationControls";
 import TagChips from "@/components/archive/TagChips";
 import DateCalendar from "@/components/archive/DateCalendar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { buildClipboardPayload } from "@/lib/chat/clipboard";
 import { getAuthHeaders } from "@/lib/api";
+import {
+  getSafeArchivePageIndex,
+} from "@/lib/archive/pagination";
+import type { ArchiveMessage } from "@/lib/archive/types";
 import { stripExportArtifacts } from "@/lib/stripExportArtifacts";
 import { useScope } from "../../hooks/useScope";
 
@@ -33,8 +33,7 @@ const archiveCardStyles = {
   destructive: "px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 hover:border-red-400/40 text-red-400 hover:text-red-300 rounded transition-colors",
 };
 
-const archiveMessageCardBase =
-  "group relative isolate overflow-hidden rounded-xl border p-6 shadow-none transition-[border-color,box-shadow,background-color] duration-200";
+const ARCHIVE_RESULTS_PAGE_SIZE = 75;
 
 function cleanMessageText(text: string) {
   return stripExportArtifacts(text || "");
@@ -62,19 +61,6 @@ function getMsgChatId(m: any) {
     : typeof m?.session_id !== "undefined"
     ? String(m.session_id)
     : "";
-}
-
-function getMsgSource(m: any) {
-  return typeof m?.source === "string" ? m.source : "archive";
-}
-
-interface ArchiveMessage {
-  id: number;
-  ts: string;
-  role: "user" | "assistant";
-  chat_id: string;
-  text: string;
-  source: string;
 }
 
 interface SavedChip {
@@ -124,8 +110,7 @@ function ArchivePageInner() {
   const [sourceFilter, setSourceFilter] = useState<"" | "chatgpt" | "dartboard">("");
   const [selectedDates, setSelectedDates] = useState<string[]>([]); // Array of YYYY-MM-DD strings
   const [datesDirty, setDatesDirty] = useState(false);
-  const [allFilteredResults, setAllFilteredResults] = useState<ArchiveMessage[]>([]); // All filtered results (for client-side pagination)
-  const [results, setResults] = useState<ArchiveMessage[]>([]); // Current page results (deprecated, will be replaced by pages)
+  const [results, setResults] = useState<ArchiveMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchWarning, setSearchWarning] = useState<string | null>(null);
@@ -135,8 +120,8 @@ function ArchivePageInner() {
   const [showLowerReveal, setShowLowerReveal] = useState(false);
   
   // Pagination state
-  const [currentPage, setCurrentPage] = useState(0); // Changed to 0-based for array indexing
-  const [pageSize] = useState(30); // Deprecated - kept for compatibility during transition
+  const [currentPage, setCurrentPage] = useState(0);
+  const deferredWindowPage = useDeferredValue(currentPage);
   const [totalResults, setTotalResults] = useState(0);
 
   // Import state
@@ -207,11 +192,6 @@ function ArchivePageInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Length-based pagination constants
-  const PAGE_CHAR_BUDGET = 35000;
-  const MIN_MESSAGES_PER_PAGE = 10;
-  const ARCHIVE_SEARCH_FETCH_PAGE_SIZE = 500;
-  const ARCHIVE_SEARCH_FETCH_CAP = 2500;
   const ARCHIVE_BOOT_MAX_WAIT_MS = 1200;
   const ARCHIVE_BOOT_MIN_VISIBLE_MS = 1600;
 
@@ -245,52 +225,10 @@ function ArchivePageInner() {
     };
   }, []);
 
-  // Length-based pagination: split allFilteredResults into pages by character count
-  const pages = useMemo(() => {
-    if (!allFilteredResults || allFilteredResults.length === 0) {
-      return [[]];
-    }
-
-    const result: ArchiveMessage[][] = [];
-    let currentPage: ArchiveMessage[] = [];
-    let currentLen = 0;
-
-    const getMessageLength = (msg: ArchiveMessage) => {
-      const text = msg.text || "";
-      return text.length;
-    };
-
-    for (const msg of allFilteredResults) {
-      const msgLen = getMessageLength(msg);
-      
-      // If current page already has some messages and adding this one would
-      // push us far over the budget AND we already have MIN_MESSAGES_PER_PAGE,
-      // then close this page and start a new one.
-      const wouldExceedBudget = currentLen + msgLen > PAGE_CHAR_BUDGET;
-      const hasMinMessages = currentPage.length >= MIN_MESSAGES_PER_PAGE;
-
-      if (currentPage.length > 0 && wouldExceedBudget && hasMinMessages) {
-        result.push(currentPage);
-        currentPage = [];
-        currentLen = 0;
-      }
-
-      currentPage.push(msg);
-      currentLen += msgLen;
-      // Edge case: extremely long message becomes a single-message page
-    }
-
-    if (currentPage.length > 0) {
-      result.push(currentPage);
-    }
-
-    return result.length > 0 ? result : [[]];
-  }, [allFilteredResults]);
-
-  // Get current page messages (0-based indexing)
-  const safePageIndex = Math.max(0, Math.min(currentPage, pages.length - 1));
-  const messagesOnPage = pages[safePageIndex] || [];
-  const activePageIndex = safePageIndex;
+  const totalPages = Math.max(1, Math.ceil(totalResults / ARCHIVE_RESULTS_PAGE_SIZE));
+  const activePageIndex = getSafeArchivePageIndex(currentPage, totalPages);
+  const deferredWindowPageIndex = getSafeArchivePageIndex(deferredWindowPage, totalPages);
+  const messagesOnPage = results;
 
   const getEntranceStyle = (
     isVisible: boolean,
@@ -303,133 +241,12 @@ function ArchivePageInner() {
     willChange: isVisible ? undefined : "opacity, transform",
   });
 
-  const totalPages = pages.length;
-  const maxVisiblePages = 5;
-  const paginationPageNumbers: (number | string)[] = [];
-  const currentPageNum = activePageIndex + 1;
-
-  if (totalPages <= maxVisiblePages) {
-    for (let i = 1; i <= totalPages; i++) {
-      paginationPageNumbers.push(i);
-    }
-  } else if (currentPageNum <= 3) {
-    for (let i = 1; i <= 5; i++) {
-      paginationPageNumbers.push(i);
-    }
-    paginationPageNumbers.push("...");
-    paginationPageNumbers.push(totalPages);
-  } else if (currentPageNum >= totalPages - 2) {
-    paginationPageNumbers.push(1);
-    paginationPageNumbers.push("...");
-    for (let i = totalPages - 4; i <= totalPages; i++) {
-      paginationPageNumbers.push(i);
-    }
-  } else {
-    paginationPageNumbers.push(1);
-    paginationPageNumbers.push("...");
-    for (let i = currentPageNum - 2; i <= currentPageNum + 2; i++) {
-      paginationPageNumbers.push(i);
-    }
-    paginationPageNumbers.push("...");
-    paginationPageNumbers.push(totalPages);
-  }
-
-  const renderPaginationControls = (placement: "top" | "bottom") => {
-    if (totalPages <= 1) {
-      return null;
-    }
-
-    return (
-      <div
-        className={
-          placement === "top"
-            ? "flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 shadow-[0_10px_28px_rgba(0,0,0,0.18)]"
-            : "flex items-center justify-center gap-2 border-t border-gray-700 pt-4"
-        }
-      >
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const newPage = activePageIndex - 1;
-            if (newPage >= 0) {
-              setCurrentPage(newPage);
-            }
-          }}
-          disabled={activePageIndex === 0 || loading}
-          className="rounded bg-gray-700 px-3 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-600 disabled:cursor-default disabled:opacity-50"
-        >
-          ← Previous
-        </button>
-
-        <div className="flex items-center gap-1">
-          {paginationPageNumbers.map((page, index) => {
-            if (page === "...") {
-              return (
-                <span key={`ellipsis-${placement}-${index}`} className="px-2 text-gray-500">
-                  ...
-                </span>
-              );
-            }
-
-            const pageNum = page as number;
-            const pageIndex = pageNum - 1;
-            const isCurrentPage = pageIndex === activePageIndex;
-
-            return (
-              <button
-                key={`${placement}-${pageNum}`}
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (pageIndex !== activePageIndex && !loading) {
-                    setCurrentPage(pageIndex);
-                  }
-                }}
-                disabled={loading}
-                className={`min-w-[2.5rem] rounded px-3 py-2 text-sm transition-colors ${
-                  isCurrentPage
-                    ? "bg-blue-600 font-semibold text-white"
-                    : "bg-gray-700 text-gray-200 hover:bg-gray-600 disabled:cursor-default disabled:opacity-50"
-                }`}
-              >
-                {pageNum}
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const newPage = activePageIndex + 1;
-            if (newPage < totalPages) {
-              setCurrentPage(newPage);
-            }
-          }}
-          disabled={activePageIndex >= totalPages - 1 || loading}
-          className="rounded bg-gray-700 px-3 py-2 text-sm text-gray-200 transition-colors hover:bg-gray-600 disabled:cursor-default disabled:opacity-50"
-        >
-          Next →
-        </button>
-
-        <span className="ml-4 text-xs text-gray-500">
-          Page {currentPageNum} of {totalPages} ({totalResults.toLocaleString()} total)
-        </span>
-      </div>
-    );
-  };
-
-  // Clamp currentPage when pages.length changes (e.g., after filter change)
+  // Clamp currentPage when totalPages changes (e.g., after filter change)
   useEffect(() => {
-    if (pages.length > 0 && currentPage >= pages.length) {
-      setCurrentPage(pages.length - 1);
+    if (totalPages > 0 && currentPage >= totalPages) {
+      setCurrentPage(totalPages - 1);
     }
-  }, [pages.length, currentPage]);
+  }, [totalPages, currentPage]);
 
   const persistPins = (chips: SavedChip[]) => {
     if (typeof window === "undefined") return;
@@ -1278,9 +1095,9 @@ function ArchivePageInner() {
     tagOverride?: string[];
     tagModeOverride?: TagMatchMode;
     timeBandOverride?: TimeBand;
-    queryOverride?: string; // Use this query instead of searchQuery (for Select All)
-    page?: number; // Optional page override (defaults to currentPage)
-    resetPage?: boolean; // If true, reset to first page
+    queryOverride?: string;
+    page?: number; // Optional 0-based page override
+    resetPage?: boolean;
   }) => {
     searchAbortRef.current?.abort();
     const controller = new AbortController();
@@ -1294,17 +1111,15 @@ function ArchivePageInner() {
       const effectiveTags = options?.tagOverride ?? searchTags;
       const effectiveTagMode = options?.tagModeOverride ?? tagMatchMode;
       const effectiveBand = options?.timeBandOverride ?? timeBand;
-      // Use queryOverride if provided (for Select All), otherwise use searchQuery (for regular searches)
-      const effectiveQuery = options?.queryOverride ?? searchQuery;
-      
-      // Reset to page 0 if filters changed, otherwise use specified page or current page
-      if (options?.resetPage) {
-        setCurrentPage(0);
-      }
+      const effectiveQuery = options?.queryOverride ?? lastAppliedQuery;
+      const targetPageIndex = options?.resetPage
+        ? 0
+        : getSafeArchivePageIndex(options?.page ?? currentPage, totalPages);
+
+      setCurrentPage(targetPageIndex);
 
       // If no dates are selected, don't search - clear results instead
       if (effectiveDates.length === 0) {
-        setAllFilteredResults([]);
         setResults([]);
         setTotalResults(0);
         setCurrentPage(0);
@@ -1346,81 +1161,53 @@ function ArchivePageInner() {
           params.set("end_ts", end_ts);
         }
       }
+      params.set("offset", String(targetPageIndex * ARCHIVE_RESULTS_PAGE_SIZE));
+      params.set("limit", String(ARCHIVE_RESULTS_PAGE_SIZE));
 
-      let allResults: ArchiveMessage[] = [];
-      let total: number = 0;
-      let offset = 0;
-      let hasMore = true;
-
-      while (hasMore && offset < ARCHIVE_SEARCH_FETCH_CAP) {
-        params.set("offset", String(offset));
-        params.set("limit", String(ARCHIVE_SEARCH_FETCH_PAGE_SIZE));
-
-        const response = await fetch(`/api/archive/search?${params.toString()}`, {
-          headers: getRequestHeaders(false),
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          let errorMessage = "Failed to search archive";
-          try {
-            const errJson = await response.json() as { error?: string };
-            if (errJson?.error) errorMessage = errJson.error;
-          } catch {
-            // ignore parse failures, keep generic message
-          }
-          throw new Error(errorMessage);
+      const response = await fetch(`/api/archive/search?${params.toString()}`, {
+        headers: getRequestHeaders(false),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        let errorMessage = "Failed to search archive";
+        try {
+          const errJson = await response.json() as { error?: string };
+          if (errJson?.error) errorMessage = errJson.error;
+        } catch {
+          // ignore parse failures, keep generic message
         }
-
-        const data = await response.json();
-        if (controller.signal.aborted) {
-          return;
-        }
-        if (data?.error) {
-          throw new Error(data.error);
-        }
-
-        if (Array.isArray(data)) {
-          allResults = data.slice(0, ARCHIVE_SEARCH_FETCH_CAP);
-          total = data.length;
-          hasMore = false;
-          break;
-        }
-
-        if (!data || typeof data !== "object" || !Array.isArray(data.results)) {
-          console.warn("Unexpected API response format:", data);
-          allResults = [];
-          total = 0;
-          hasMore = false;
-          break;
-        }
-
-        const batch = data.results as ArchiveMessage[];
-        allResults = allResults.concat(batch);
-        total = typeof data.total === "number" ? data.total : allResults.length;
-        offset += batch.length;
-        hasMore = Boolean(data.hasMore) && batch.length > 0;
+        throw new Error(errorMessage);
       }
 
-      if (allResults.length > ARCHIVE_SEARCH_FETCH_CAP) {
-        allResults = allResults.slice(0, ARCHIVE_SEARCH_FETCH_CAP);
+      const data = await response.json();
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
-      if (total > allResults.length) {
-        setSearchWarning(
-          `Showing first ${allResults.length.toLocaleString()} of ${total.toLocaleString()} results. Refine filters to narrow the list.`
-        );
-      } else {
+      if (Array.isArray(data)) {
+        setResults(data);
+        setTotalResults(data.length);
         setSearchWarning(null);
+        setDatesDirty(false);
+        return;
       }
+
+      if (!data || typeof data !== "object" || !Array.isArray(data.results)) {
+        console.warn("Unexpected API response format:", data);
+        setResults([]);
+        setTotalResults(0);
+        setSearchWarning(null);
+        setDatesDirty(false);
+        return;
+      }
+
+      setSearchWarning(null);
       setDatesDirty(false);
-      
-      // Store all filtered results for client-side pagination
-      setAllFilteredResults(allResults);
-      setTotalResults(total);
-      // Reset to page 0 when new results are fetched
-      if (options?.resetPage) {
-        setCurrentPage(0);
-      }
+      setResults(data.results as ArchiveMessage[]);
+      setTotalResults(typeof data.total === "number" ? data.total : (data.results as ArchiveMessage[]).length);
     } catch (err) {
       if ((err as { name?: string } | null)?.name === "AbortError") {
         return;
@@ -1451,6 +1238,15 @@ function ArchivePageInner() {
       tagOverride: searchTags,
       resetPage: true,
     });
+  };
+
+  const handlePageChange = (pageIndex: number) => {
+    const safePageIndex = getSafeArchivePageIndex(pageIndex, totalPages);
+    if (loading || safePageIndex === currentPage) {
+      return;
+    }
+
+    void runSearch({ page: safePageIndex, resetPage: false });
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1556,7 +1352,6 @@ function ArchivePageInner() {
   const resetArchiveUI = () => {
     // Core data state
     setResults([]);
-    setAllFilteredResults([]);
     setDateStats(null);
     
     // Search and filter state
@@ -1624,7 +1419,7 @@ function ArchivePageInner() {
 
 
   // Base markdown components matching AssistantMessage styling
-  const baseMarkdownComponents = {
+  const baseMarkdownComponents = useMemo(() => ({
     p: ({ node, ...props }: any) => (
       <p className="mt-0 mb-3 last:mb-0 text-[14px] leading-relaxed text-slate-100" {...props} />
     ),
@@ -1728,11 +1523,11 @@ function ArchivePageInner() {
     a: ({ node, ...props }: any) => (
       <a className="text-blue-400 hover:text-blue-300 underline" {...props} />
     ),
-  };
+  }), []);
 
   // Create ReactMarkdown components that highlight text nodes AFTER parsing
   // This prevents breaking markdown syntax (headers, lists, etc.)
-  const createHighlightComponents = (query: string, tags: string[]) => {
+  const createHighlightComponents = useCallback((query: string, tags: string[]) => {
     const termsToHighlight: string[] = [];
     
     // Collect terms from search query
@@ -1918,7 +1713,16 @@ function ArchivePageInner() {
         return <em {...props}>{highlightTextContent(children)}</em>;
       },
     };
-  };
+  }, [baseMarkdownComponents]);
+
+  const hasActiveSearchResultFilters = Boolean(lastAppliedQuery.trim() || searchTags.length > 0);
+  const searchResultMarkdownComponents = useMemo(
+    () =>
+      hasActiveSearchResultFilters
+        ? createHighlightComponents(lastAppliedQuery, searchTags)
+        : baseMarkdownComponents,
+    [baseMarkdownComponents, createHighlightComponents, hasActiveSearchResultFilters, lastAppliedQuery, searchTags]
+  );
 
   // Load context for a message (shows ±N messages around it)
   const loadContext = async (messageId: number, window: number = 8) => {
@@ -2013,12 +1817,12 @@ function ArchivePageInner() {
         total: number;
       };
       
-      // Calculate which page it's on (30 per page, 1-indexed position)
-      const pageNumber = Math.floor((data.position - 1) / pageSize) + 1;
+      // Calculate which 0-based page it belongs to.
+      const pageIndex = Math.floor((data.position - 1) / ARCHIVE_RESULTS_PAGE_SIZE);
       
       // Navigate to that date and page
       setSelectedDates([messageDate]);
-      await runSearch({ page: pageNumber, queryOverride: "", resetPage: false });
+      await runSearch({ page: pageIndex, queryOverride: "", resetPage: false });
       
       // Scroll to message after results load
       setTimeout(() => {
@@ -2036,7 +1840,7 @@ function ArchivePageInner() {
       console.error("Error scrolling to message:", error);
       // Fallback: just navigate to the date
       setSelectedDates([messageDate]);
-      await runSearch({ page: 1, queryOverride: "", resetPage: true });
+      await runSearch({ page: 0, queryOverride: "", resetPage: true });
     }
   };
 
@@ -2131,174 +1935,6 @@ function ArchivePageInner() {
       document.body.removeChild(textArea);
     }
   };
-
-  // Memoized message card component to prevent re-renders when vault modal state changes
-  const MessageCard = React.memo(({ 
-    message, 
-    options,
-    isHighlighted,
-    isCopied,
-    displayText,
-    hasActiveFilters,
-    searchQuery,
-    searchTags,
-    onCopy,
-    onViewContext,
-    onCenter,
-    onGoToMessage,
-    onVault,
-  }: {
-    message: ArchiveMessage;
-    options: { variant: "search" | "context" };
-    isHighlighted: boolean;
-    isCopied: boolean;
-    displayText: string;
-    hasActiveFilters: boolean;
-    searchQuery: string;
-    searchTags: string[];
-    onCopy: () => void;
-    onViewContext?: () => void;
-    onCenter?: () => void;
-    onGoToMessage?: () => void;
-    onVault: () => void;
-  }) => {
-    const elementId =
-      options.variant === "search"
-        ? `message-${message.id}`
-        : `context-message-${message.id}`;
-    const isUser = message.role === "user";
-    const cardToneClass = isUser
-      ? "bg-[#142943]/80 border-cyan-400/30"
-      : "bg-[#171f3b]/80 border-indigo-400/30";
-    const rolePillClass = isUser
-      ? "border border-cyan-300/35 bg-cyan-500/20 text-cyan-100"
-      : "border border-indigo-300/35 bg-indigo-500/20 text-indigo-100";
-
-    return (
-      <div
-        key={`${options.variant}-${message.id}`}
-        id={elementId}
-        ref={isHighlighted && options.variant === "context" ? highlightedMessageRef : null}
-        className={`${archiveMessageCardBase} ${cardToneClass} ${
-          isHighlighted
-            ? "border-blue-500 shadow-lg shadow-blue-500/30"
-            : ""
-        }`}
-      >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-2 flex-wrap text-xs">
-            {isHighlighted && options.variant === "context" && (
-              <span className="px-2 py-1 rounded font-semibold bg-blue-600 text-white animate-pulse">
-                Selected
-              </span>
-            )}
-            <span
-              className={`px-2 py-1 rounded-md text-[11px] font-semibold ${rolePillClass}`}
-            >
-              {message.role === "assistant"
-                ? getMsgSource(message) === "live_chat"
-                  ? "DartBoard"
-                  : "ChatGPT"
-                : "User"}
-            </span>
-            <span className="text-gray-400/90">{new Date(getMsgTs(message)).toLocaleString()}</span>
-          </div>
-          <div className="flex items-center gap-0">
-            {/* Copy (match /chat assistant message action button visuals) */}
-            <button
-              type="button"
-              onClick={onCopy}
-              className={
-                "relative inline-flex h-8 w-8 items-center justify-center rounded-md bg-transparent border-transparent hover:bg-white/5 transition-colors duration-300 ease-out p-0 leading-none " +
-                (isCopied ? "bg-white/5" : "")
-              }
-              title={isCopied ? "Copied" : "Copy"}
-            >
-              <span
-                className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                  isCopied
-                    ? "opacity-0 scale-75 -translate-y-1 blur-[0.5px]"
-                    : "opacity-100 scale-100 translate-y-0 blur-0"
-                }`}
-              >
-                <CopyIcon size={20} className="block scale-[1.05]" />
-              </span>
-              <span
-                className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                  isCopied
-                    ? "opacity-100 scale-100 translate-y-0 blur-0"
-                    : "opacity-0 scale-75 translate-y-1 blur-[0.5px]"
-                }`}
-              >
-                <CheckIcon size={20} className="block scale-[1.05]" />
-              </span>
-            </button>
-
-            {/* Context (match /chat assistant message action button visuals) */}
-            {options.variant === "search" && onViewContext && (
-              <button
-                type="button"
-                onClick={onViewContext}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-transparent border-transparent hover:bg-white/5 transition p-0 leading-none"
-                title="View context (±8 messages)"
-              >
-                <ContextIcon size={22} className="block scale-[1.12] translate-x-[2px]" />
-              </button>
-            )}
-            {isHighlighted && options.variant === "context" && onCenter && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onCenter();
-                }}
-                className="text-gray-400 hover:text-blue-300 transition-colors"
-                title="Center this message"
-              >
-                Center
-              </button>
-            )}
-            {options.variant === "context" && onGoToMessage && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onGoToMessage();
-                }}
-                className="text-gray-400 hover:text-blue-300 transition-colors"
-                title="Go to message in search results"
-              >
-                Go to message
-              </button>
-            )}
-            {options.variant === "search" && (
-              <button
-                type="button"
-                onClick={onVault}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-transparent border-transparent hover:bg-white/5 transition p-0 leading-none"
-                title="Vault"
-              >
-                <VaultIcon size={20} className="block scale-[1.05]" />
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="mt-3 prose prose-invert prose-sm max-w-none text-sm text-gray-200/95">
-          <ReactMarkdown 
-            remarkPlugins={[remarkGfm]} 
-            rehypePlugins={[rehypeHighlight]}
-            components={hasActiveFilters ? createHighlightComponents(searchQuery, searchTags) : baseMarkdownComponents}
-          >
-            {cleanMessageText(getMsgText(message))}
-          </ReactMarkdown>
-        </div>
-      </div>
-    );
-  });
-
-  MessageCard.displayName = "MessageCard";
 
   const filteredPins = pinFilter
     ? savedPins.filter((chip) =>
@@ -3229,9 +2865,31 @@ function ArchivePageInner() {
         {/* Results */}
         {showArchiveContent && (
         <div className="space-y-4 isolate" style={getEntranceStyle(showLowerReveal, 180)}>
-          {renderPaginationControls("top")}
+          <ArchivePaginationControls
+            placement="top"
+            totalPages={totalPages}
+            selectedPageIndex={activePageIndex}
+            windowPageIndex={deferredWindowPageIndex}
+            totalResults={totalResults}
+            loading={loading}
+            onPageChange={handlePageChange}
+          />
 
-          {(!allFilteredResults || allFilteredResults.length === 0) && !loading && (
+          {loading && results.length === 0 && (
+            <div className="min-h-[88px] rounded-xl border border-blue-500/20 bg-card/40 backdrop-blur-sm flex items-center justify-center px-4">
+              <div className="flex items-center gap-3 text-center">
+                <div className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-blue-400/30 bg-blue-500/10">
+                  <Loader2 className="h-4.5 w-4.5 animate-spin text-blue-300" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-gray-100">Searching archive...</p>
+                  <p className="text-xs text-blue-100/55">Loading results</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {results.length === 0 && !loading && (
             <div className="text-center text-gray-500 py-12">
               {searchQuery || searchTags.length > 0 || roleFilter || sourceFilter || selectedDates.length > 0
                 ? "No results found. Try adjusting your filters."
@@ -3239,24 +2897,22 @@ function ArchivePageInner() {
             </div>
           )}
 
-          {Array.isArray(messagesOnPage) && messagesOnPage.length > 0 && messagesOnPage.map((message, index) => {
-            const hasActiveFilters = Boolean(lastAppliedQuery.trim() || searchTags.length > 0);
+          {Array.isArray(messagesOnPage) && messagesOnPage.length > 0 && messagesOnPage.map((message) => {
+            const displayText = cleanMessageText(getMsgText(message));
             return (
-              <div key={message.id} style={getEntranceStyle(showLowerReveal, 210 + Math.min(index, 8) * 45)}>
-                <MessageCard
-                  message={message}
-                  options={{ variant: "search" }}
-                  isHighlighted={false}
-                  isCopied={copiedMessageId === message.id}
-                  displayText={cleanMessageText(getMsgText(message))}
-                  hasActiveFilters={hasActiveFilters}
-                  searchQuery={lastAppliedQuery}
-                  searchTags={searchTags}
-                  onCopy={() => handleCopyMessage(message)}
-                  onViewContext={() => handleViewContext(message.id)}
-                  onVault={() => handleVaultMessage(message)}
-                />
-              </div>
+              <ArchiveMessageCard
+                key={message.id}
+                message={message}
+                variant="search"
+                isHighlighted={false}
+                isCopied={copiedMessageId === message.id}
+                displayText={displayText}
+                markdownComponents={searchResultMarkdownComponents}
+                enableSyntaxHighlight={displayText.includes("```")}
+                onCopy={() => handleCopyMessage(message)}
+                onViewContext={() => handleViewContext(message.id)}
+                onVault={() => handleVaultMessage(message)}
+              />
             );
           })}
           
@@ -3348,22 +3004,21 @@ function ArchivePageInner() {
                   )}
 
                   {contextResults.map((message) => {
-                    const hasActiveFilters = Boolean(lastAppliedQuery.trim() || searchTags.length > 0);
+                    const displayText = cleanMessageText(getMsgText(message));
                     return (
-                      <MessageCard
+                      <ArchiveMessageCard
                         key={message.id}
                         message={message}
-                        options={{ variant: "context" }}
+                        variant="context"
                         isHighlighted={highlightId === message.id}
                         isCopied={copiedMessageId === message.id}
-                        displayText={cleanMessageText(getMsgText(message))}
-                        hasActiveFilters={hasActiveFilters}
-                        searchQuery={lastAppliedQuery}
-                        searchTags={searchTags}
+                        displayText={displayText}
+                        markdownComponents={searchResultMarkdownComponents}
+                        enableSyntaxHighlight={displayText.includes("```")}
+                        highlightedRef={highlightedMessageRef}
                         onCopy={() => handleCopyMessage(message)}
                         onCenter={centerHighlightedMessage}
                         onGoToMessage={() => scrollToMessage(message)}
-                        onVault={() => {}} // Not used in context variant
                       />
                     );
                   })}
@@ -3374,7 +3029,15 @@ function ArchivePageInner() {
             document.body
           )}
           
-          {renderPaginationControls("bottom")}
+          <ArchivePaginationControls
+            placement="bottom"
+            totalPages={totalPages}
+            selectedPageIndex={activePageIndex}
+            windowPageIndex={deferredWindowPageIndex}
+            totalResults={totalResults}
+            loading={loading}
+            onPageChange={handlePageChange}
+          />
         </div>
         )}
 

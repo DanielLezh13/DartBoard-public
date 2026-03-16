@@ -4,6 +4,8 @@ import { estimateTokens } from "@/lib/tokenEstimate";
 import { MAX_MEMORY_SAVE_TOKENS } from "@/lib/limits";
 import { getServerScope } from "@/lib/scope-server";
 import { getMemoryDocPlainText, normalizeMemoryDocJson } from "@/lib/memoryDoc";
+import { syncMemoryEmbeddingById } from "@/lib/memory/semantic";
+import { getOpenAIClient } from "@/lib/openai";
 import { getScopePlanLimits } from "@/lib/plan";
 import {
   getOwnedMemory,
@@ -290,6 +292,16 @@ export async function POST(request: NextRequest) {
         null
       );
 
+    try {
+      await syncMemoryEmbeddingById({
+        db,
+        openai: getOpenAIClient(),
+        memoryId: Number(result.lastInsertRowid),
+      });
+    } catch (embeddingError) {
+      console.warn("Failed to index memory embedding after create:", embeddingError);
+    }
+
     // Fetch created memory with folder name
     const memory = db
       .prepare(
@@ -537,6 +549,16 @@ export async function PUT(request: NextRequest) {
 
     const updateQuery = `UPDATE memories SET ${updates.join(", ")} WHERE id = ? AND ${owner.column} = ?`;
     db.prepare(updateQuery).run(...values);
+
+    try {
+      await syncMemoryEmbeddingById({
+        db,
+        openai: getOpenAIClient(),
+        memoryId: parsedId,
+      });
+    } catch (embeddingError) {
+      console.warn("Failed to refresh memory embedding after update:", embeddingError);
+    }
 
     // If overflow sessions exist and detach flag is true, detach from those sessions
     let detachedSessionIds: number[] = [];

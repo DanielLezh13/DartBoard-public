@@ -1,36 +1,74 @@
 # DartBoard
 
-Stateful AI workspace for chat, memory, and archive-driven context.
+Stateful AI workspace for explicit context control across chat, memory, and historical archive data.
 
-Live app: `https://dartboard-production-71e8.up.railway.app`
+[Live App](https://dartboard-production-71e8.up.railway.app)  
+[Public Repo](https://github.com/DanielLezh13/DartBoard-public)
 
 ## 10-Second Summary
 
-DartBoard is a stateful AI workspace that gives users explicit control over model context.
+DartBoard is an AI workspace built for longer-running workflows where context quality actually matters.
 
 It separates:
 - Archive (historical data)
 - Memory (structured reusable context)
 - Live chat (active inference)
 
-and lets users compose them deliberately per session.
+Users can search prior conversations, convert useful messages into editable memories, and decide exactly what context gets attached or pinned per session before the model responds.
 
 ## Overview
 
-DartBoard is an AI workspace designed around explicit, user-controlled context.
+DartBoard treats memory as a user-controlled product surface instead of hidden prompt text.
 
-Instead of treating memory as hidden prompt text, DartBoard exposes memory as a first-class object that can be created, edited, attached, and reused across sessions. Imported chat history, saved ideas, and live conversations all feed into a single workflow:
+Imported chat history, saved ideas, and live conversations all feed into one workflow:
 
 `archive -> memory -> active chat`
 
 The goal is long-running, context-aware AI work without losing control over what the model sees.
 
+## Architecture
+
+```mermaid
+graph TD
+  User["User"] --> UI["Next.js / React Workspace"]
+  UI --> ChatAPI["Chat API Routes"]
+  UI --> ArchiveAPI["Archive API Routes"]
+  UI --> MemoryAPI["Memory API Routes"]
+
+  ChatAPI --> Context["Context Assembly Pipeline"]
+  Context --> SessionsDB[("SQLite: sessions / messages / memories")]
+  Context --> LLM["OpenAI API"]
+
+  ArchiveAPI --> ArchiveDB[("SQLite: archive_messages")]
+  MemoryAPI --> SessionsDB
+
+  ArchiveDB --> MemoryAPI
+  MemoryAPI --> UI
+  LLM --> UI
+```
+
+## How It Works
+
+1. Users import or search old conversations in Archive.
+2. Useful messages can be promoted into editable Memory entries.
+3. During chat, users attach or pin the memories they want the model to see.
+4. DartBoard assembles context from system rules, mode state, focus state, attached memory, and recent session history.
+5. The assembled prompt is sent to the model and returned in the live workspace.
+
 ## Key Capabilities
 
-- **Persistent memory system:** create reusable memory entries from chats or imported history and attach them directly to new sessions.
-- **Archive-driven context:** import ChatGPT exports, search timelines, and promote past messages into structured memory.
-- **Session-level context control:** attach, detach, reorder, and pin memories to define exactly what stays in scope.
-- **Real product constraints:** plan limits, Stripe billing flows, and session governance built into runtime behavior.
+- **Archive -> memory workflow:** search prior conversations, then promote useful results into reusable memory.
+- **Explicit context control:** attach, detach, reorder, and pin memories at the session level.
+- **Long-context handling:** rolling summaries and budgeted history selection before model calls.
+- **Real product systems:** auth, billing, plan limits, usage gates, and archive import/search are built into the runtime.
+
+## Engineering Highlights
+
+- `Next.js 14` + `React 18` + `TypeScript` app-router architecture with server routes separated from client workspace state.
+- `better-sqlite3` (WAL) data model covering sessions, messages, memories, attachments, archive data, usage, and billing state.
+- Deterministic prompt assembly with layered context injection and pinned-memory controls.
+- Archive ingestion/search for ChatGPT exports (`.json` / `.parquet`) with normalization, filtering, and context-window retrieval.
+- Multi-panel workspace UX with drag-and-drop memory/session flows and optimistic client-server sync.
 
 ## Core Workflows
 
@@ -70,12 +108,6 @@ The goal is long-running, context-aware AI work without losing control over what
 - OpenAI API
 - Stripe billing + webhooks
 
-## Architecture Notes
-
-- Single-node deployment model with persistent mounted volume.
-- Production DB path example: `DB_PATH=/data/dartz_memory.db`.
-- Main route groups are documented in [docs/API_ROUTE_MAP.md](docs/API_ROUTE_MAP.md).
-
 ## UI Region Map
 
 - `SessionFolderRail`: left folder bubbles for chat sessions.
@@ -84,6 +116,12 @@ The goal is long-running, context-aware AI work without losing control over what
 - `MemoryFolderRail`: right folder bubbles for memories.
 - `MemoryPanel`: right memory list/search panel.
 - `MemoryDetailOverlay`: in-chat memory editor/reader overlay.
+
+## Deployment Notes
+
+- Single-node deployment model with persistent mounted volume.
+- Production DB path example: `DB_PATH=/data/dartz_memory.db`.
+- Main route groups are documented in [docs/API_ROUTE_MAP.md](docs/API_ROUTE_MAP.md).
 
 ## Local Setup
 

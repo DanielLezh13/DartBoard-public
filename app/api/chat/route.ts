@@ -3,12 +3,8 @@ import { getOpenAIClient } from "@/lib/openai";
 import { getDb, logTokenUsage } from "@/lib/db";
 import { 
   CONTEXT_LIMIT_TOKENS, 
-  estimateTokens,
-  estimateTokensForMessages 
 } from "@/lib/tokenEstimate";
 import { MAX_INPUT_CHARS, MAX_IMAGES_PER_MESSAGE } from "@/lib/limits";
-import { compressContextIfNeeded } from "@/lib/compression";
-import { buildLYNXBootSequence } from "@/lib/LYNX_BOOT_SEQUENCE";
 import { DartzModeId } from "@/lib/modes";
 import type { ChatMessage } from "@/types/chat";
 import { getServerScope } from "@/lib/scope-server";
@@ -22,6 +18,17 @@ import { enforceApiRateLimit } from "@/lib/rateLimit";
 import { readFile } from "fs/promises";
 import { basename, extname, join } from "path";
 import { getPrivateUploadPath, sanitizeStoredUploadName } from "@/lib/uploads";
+import {
+  buildChatContextAuditHeaders,
+  buildChatContextAuditManifest,
+  buildChatContextMetricsEvent,
+} from "@/lib/context/audit";
+import { assemblePromptMessages, buildSessionContextBase } from "@/lib/context/assemble";
+import type {
+  ChatStyleContentPart,
+  ChatStyleMessage,
+  HistoryPolicy,
+} from "@/lib/context/types";
 
 export const dynamic = "force-dynamic";
 
@@ -94,17 +101,6 @@ type GeminiGenerateContentResponse = {
     groundingMetadata?: { groundingChunks?: GeminiGroundingChunk[] };
     grounding_metadata?: { grounding_chunks?: GeminiGroundingChunk[] };
   }>;
-};
-
-type ChatStyleContentPart = {
-  type: "text" | "image_url";
-  text?: string;
-  image_url?: { url: string };
-};
-
-type ChatStyleMessage = {
-  role: "user" | "assistant" | "system";
-  content: string | ChatStyleContentPart[];
 };
 
 function toResponsesInput(messages: ChatStyleMessage[]) {
@@ -333,21 +329,6 @@ function stripTrailingSourcesSection(text: string): string {
   if (!match) return input;
   if (match.index <= 0) return input;
   return input.slice(0, match.index).trim();
-}
-
-function parseMessageMeta(rawMeta: string | null | undefined): Record<string, unknown> | null {
-  if (!rawMeta) return null;
-  try {
-    const parsed = JSON.parse(rawMeta);
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-function isWebVerifiedMeta(rawMeta: string | null | undefined): boolean {
-  const parsed = parseMessageMeta(rawMeta);
-  return Boolean(parsed && parsed.web_verified === true);
 }
 
 function shouldSkipWebForSmallTalk(message: string): boolean {
@@ -653,7 +634,7 @@ export async function POST(request: NextRequest) {
       attachedMemoryIds?: number[];
       imageUrls?: string[];
       stream?: boolean;
-      historyPolicy?: "full" | "none";
+      historyPolicy?: HistoryPolicy;
       searchQuery?: string;
       web?: boolean;
       userTimeZone?: string;
@@ -734,16 +715,6 @@ export async function POST(request: NextRequest) {
     );
 
     const model = limits.model;
-
-    // Build complete system message using unified LYNX boot sequence
-    // This centralizes all prompt assembly in the correct priority order:
-    // 1. LYNX_STATE_CORE (runtime laws)
-    // 2. LYNX_USER_CORE (user's core spec)
-    // 3. User profile (name, style, preferences)
-    // 4. Mode directives
-    // 5. Focus Mode / UOS (if enabled)
-    // 6. Memory context (if folder selected)
-    let injectedMemoryIds: number[] = []; // Capture for audit
 
     const sessionRow = db
       .prepare(
@@ -853,118 +824,24 @@ export async function POST(request: NextRequest) {
       typeof sessionRow.focus_goal === "string" ? sessionRow.focus_goal.trim() : "";
     const persistedFocusEnabled =
       Number(sessionRow.focus_enabled || 0) === 1 && persistedFocusGoal.length > 0;
-    
-    // Compute attachment state from DB (not client)
-    let attachedIds: number[] = [];
-    let pinnedIds: number[] = [];
-    
-    if (db) {
-      attachedIds = db.prepare(`
-        SELECT memory_id FROM session_memory_attachments 
-        WHERE session_id = ? AND is_enabled = 1
-        ORDER BY sort_order ASC, created_at ASC
-      `).all(sessionId).map(row => (row as any).memory_id);
-      
-      pinnedIds = db.prepare(`
-        SELECT memory_id FROM session_memory_attachments 
-        WHERE session_id = ? AND is_enabled = 1 AND COALESCE(is_pinned,0)=1
-        ORDER BY sort_order ASC, created_at ASC
-      `).all(sessionId).map(row => (row as any).memory_id);
-    }
-    
-    const systemMessageContent = await buildLYNXBootSequence({
-      mode,
-      modelId: model,
-      focusEnabled: persistedFocusEnabled,
-      focusGoal: persistedFocusEnabled ? persistedFocusGoal : undefined,
-      focusIntensity: "lockdown",
-      memoryFolder,
-      attachedMemoryIds: pinnedIds, // Inject only pinned
+    const {
+      attachedIds,
+      pinnedIds,
+      injectedMemoryIds,
+      finalSystemMessageContent,
+      historyMessages,
+      hasWebVerifiedHistory,
+    } = await buildSessionContextBase({
       db,
-      onInjectedMemoryIds: (ids) => { injectedMemoryIds = ids; },
+      sessionId,
+      owner,
       userId,
-      memoryOwnerColumn: owner.column,
-      memoryOwnerValue: owner.value,
+      mode,
+      model,
+      memoryFolder,
+      persistedFocusEnabled,
+      persistedFocusGoal,
     });
-
-    const finalSystemMessageContent = systemMessageContent;
-
-    // Check if compression is needed and perform it
-    await compressContextIfNeeded(sessionId);
-
-    // Load system_summary messages first (these represent compressed context)
-    const summaryMessages = db
-      .prepare(
-        `SELECT role, content 
-         FROM messages 
-         WHERE session_id = ? AND role = 'system_summary' 
-         ORDER BY created_at ASC`
-      )
-      .all(sessionId) as Array<{ role: string; content: string }>;
-
-    // Get the last summarized message ID (if any summaries exist)
-    let lastSummarizedId = 0;
-    if (summaryMessages.length > 0) {
-      const lastSummary = db
-        .prepare(
-          `SELECT meta 
-           FROM messages 
-           WHERE session_id = ? AND role = 'system_summary' 
-           ORDER BY created_at DESC 
-           LIMIT 1`
-        )
-        .get(sessionId) as { meta: string | null } | undefined;
-
-      if (lastSummary?.meta) {
-        try {
-          const meta = JSON.parse(lastSummary.meta) as { summarizedUntilId: number };
-          lastSummarizedId = meta.summarizedUntilId;
-        } catch (e) {
-          console.warn("Failed to parse summary meta:", e);
-        }
-      }
-    }
-
-    // Fetch recent regular messages (excluding summarized ones)
-    const recentMessages = db
-      .prepare(
-        `SELECT id, role, content, meta
-         FROM messages 
-         WHERE session_id = ? 
-         AND role != 'system_summary' 
-         AND role != 'system'
-         AND id > ?
-         ORDER BY created_at ASC 
-         LIMIT 20`
-      )
-      .all(sessionId, lastSummarizedId) as Array<{ id: number; role: string; content: string; meta: string | null }>;
-
-    // Build history messages array
-    // First add system_summary messages (compressed context)
-    const historyMessages: Array<{ role: "user" | "assistant" | "system"; content: string; id?: number }> = [];
-    let hasWebVerifiedHistory = false;
-    
-    for (const summary of summaryMessages) {
-      historyMessages.push({
-        role: "system",
-        content: `[Previous conversation summary]: ${summary.content}`,
-      });
-    }
-
-    // Then add recent regular messages
-    for (const msg of recentMessages) {
-      if (msg.role === "user" || msg.role === "assistant") {
-        const isWebVerified = msg.role === "assistant" && isWebVerifiedMeta(msg.meta);
-        if (isWebVerified) {
-          hasWebVerifiedHistory = true;
-        }
-        historyMessages.push({
-          role: msg.role as "user" | "assistant",
-          content: isWebVerified ? `[WEB_VERIFIED]\n${msg.content}` : msg.content,
-          id: msg.id,
-        });
-      }
-    }
 
     // Build messages array for OpenAI with system message first
     // Note: system_summary messages are already included in historyMessages as system role
@@ -1203,272 +1080,49 @@ export async function POST(request: NextRequest) {
     // NOTE: updated_at is NOT updated on user messages - only on assistant replies
     // This ensures Unfiled ordering is driven by assistant reply time
 
-    // --- Rolling summary + sliding window prompt assembly ---
-    // Goal: chat can be huge in DB, but prompt stays within context window.
-    const COMPACT_TRIGGER_RATIO = 0.90;
-    const COMPACT_TARGET_RATIO = 0.65;
-    const SAFETY_RESERVE_TOKENS = Math.max(200, Math.floor(CONTEXT_LIMIT_TOKENS * 0.05));
-
-    let rollingSummary = "";
-    let summarizedUntilMessageId: number | null = null;
-
-    // Load rolling summary and compaction boundary if session_id exists
-    try {
-      const row = db
-        .prepare(`SELECT rolling_summary, summarized_until_message_id FROM sessions WHERE id = ? AND ${owner.column} = ?`)
-        .get(sessionId, owner.value) as { rolling_summary?: string; summarized_until_message_id?: number } | undefined;
-      rollingSummary = String(row?.rolling_summary ?? "");
-      summarizedUntilMessageId = row?.summarized_until_message_id ?? null;
-    } catch {
-      rollingSummary = "";
-      summarizedUntilMessageId = null;
-    }
-
-    // Log rolling summary state
-    // Filter history messages based on compaction boundary
-    // Only messages with id > summarized_until_message_id are considered raw history
-    const eligibleHistoryMessages = summarizedUntilMessageId !== null
-      ? historyMessages.filter((msg: any) => msg.id && msg.id > summarizedUntilMessageId!)
-      : historyMessages;
-
-    const webVerifiedContextRule = hasWebVerifiedHistory
-      ? "Conversation rule: messages prefixed with [WEB_VERIFIED] are trusted web-grounded facts from this chat. Treat them as ground truth over model cutoff priors while they remain in context."
-      : null;
-
-    // Calculate raw history token budget
-    const calculateRawHistoryBudget = (summary: string): number => {
-      // Build fixed overhead: system prompt + memories + summary + current user message
-      const fixedMessages = [
-        { role: "system" as const, content: finalSystemMessageContent },
-        ...(webVerifiedContextRule ? [{ role: "system" as const, content: webVerifiedContextRule }] : []),
-        ...(webContextSystemMessage ? [{ role: "system" as const, content: webContextSystemMessage }] : []),
-        ...(summary.trim().length > 0 ? [{
-          role: "system" as const,
-          content: `CONVERSATION SUMMARY (auto, compressed):\n${summary.trim()}`
-        }] : []),
-        { role: "user" as const, content: userMessageContent }
-      ];
-      
-      const fixedOverheadTokens = estimateTokensForMessages(
-        fixedMessages.filter(m => typeof m.content === "string")
-                 .map(m => ({ role: m.role, content: String(m.content) }))
-      );
-      
-      const rawBudget = CONTEXT_LIMIT_TOKENS - fixedOverheadTokens - SAFETY_RESERVE_TOKENS;
-      
-      return Math.max(0, rawBudget);
-    };
-
-    // Select recent history messages within token budget
-    const selectRecentHistory = (messages: any[], tokenBudget: number): { recent: any[], older: any[] } => {
-      const recent: any[] = [];
-      let usedTokens = 0;
-      
-      // Scan from newest to oldest
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const msg = messages[i];
-        const msgTokens = estimateTokens(String(msg.content || ""));
-        
-        if (usedTokens + msgTokens <= tokenBudget) {
-          recent.unshift(msg);
-          usedTokens += msgTokens;
-        } else {
-          break;
-        }
-      }
-      
-      const older = messages.slice(0, messages.length - recent.length);
-      
-      return { recent, older };
-    };
-
-    const buildMessages = (summary: string, recentHistory: any[]) => {
-      const summaryMsg =
-        summary.trim().length > 0
-          ? ({
-              role: "system" as const,
-              content: `CONVERSATION SUMMARY (auto, compressed):\n${summary.trim()}`,
-            })
-          : null;
-
-      if (historyPolicy === "none") {
-        return [
-          { role: "system" as const, content: finalSystemMessageContent },
-          ...(webVerifiedContextRule ? [{ role: "system" as const, content: webVerifiedContextRule }] : []),
-          ...(webContextSystemMessage ? [{ role: "system" as const, content: webContextSystemMessage }] : []),
-          { role: "user" as const, content: userMessageContent },
-        ];
-      }
-
-      return [
-        { role: "system" as const, content: finalSystemMessageContent },
-        ...(webVerifiedContextRule ? [{ role: "system" as const, content: webVerifiedContextRule }] : []),
-        ...(webContextSystemMessage ? [{ role: "system" as const, content: webContextSystemMessage }] : []),
-        ...(summaryMsg ? [summaryMsg] : []),
-        ...recentHistory,
-        { role: "user" as const, content: userMessageContent },
-      ];
-    };
-
-    // Initial message build
-    let rawBudget = calculateRawHistoryBudget(rollingSummary);
-    const historySelection = selectRecentHistory(eligibleHistoryMessages, rawBudget);
-    let recentHistoryMessages = historySelection.recent;
-    let olderHistoryMessages = historySelection.older;
-    let messagesForOpenAI = buildMessages(rollingSummary, recentHistoryMessages);
-
-    // --- Auto-compaction (up to 2 passes) ---
-    // If prompt pressure is high, update rolling summary using older messages.
-    try {
-      let compactPasses = 0;
-      const maxCompactionPasses = 2;
-      
-      while (compactPasses < maxCompactionPasses) {
-        // Token estimate for assembled prompt (string-only; good enough to trigger)
-        const estimatedTokens = estimateTokensForMessages(
-          messagesForOpenAI
-            .filter((m) => typeof m.content === "string")
-            .map((m) => ({ role: m.role, content: String(m.content) }))
-        );
-
-        const maxTokens = CONTEXT_LIMIT_TOKENS;
-        const ratio = maxTokens > 0 ? estimatedTokens / maxTokens : 0;
-
-        // Check if we need to compact
-        const shouldCompact = historyPolicy !== "none" &&
-          ratio >= COMPACT_TRIGGER_RATIO &&
-          olderHistoryMessages.length > 0 &&
-          compactPasses < maxCompactionPasses;
-
-        if (!shouldCompact) {
-          // If we're under target ratio or no older messages, we're done
-          if (ratio <= COMPACT_TARGET_RATIO || olderHistoryMessages.length === 0) {
-            break;
-          }
-          // If we're between target and trigger but have done at least one pass, also done
-          if (compactPasses > 0 && ratio < COMPACT_TRIGGER_RATIO) {
-            break;
-          }
-        }
-        const compactInput = olderHistoryMessages
-          .map((m: any) => {
-            const c = typeof m.content === "string" ? m.content : "";
-            return `${String(m.role).toUpperCase()}: ${c}`;
-          })
-          .join("\n\n");
-
-        const compactSystem =
-          "You maintain a rolling conversation summary for an ongoing chat. " +
-          "Update the summary using ONLY the messages provided. " +
-          "Preserve: names, decisions, constraints, preferences, open tasks, and any user-specific rules. " +
-          "Do not invent details. Keep it concise.";
-
-        const compactUser =
-          (rollingSummary.trim().length
-            ? `EXISTING SUMMARY:\n${rollingSummary.trim()}\n\n` 
-            : "") + `NEW MESSAGES TO ABSORB INTO SUMMARY:\n${compactInput}`;
-
-        const compactResp = await openai.chat.completions.create({
-          model,
-          messages: [
-            { role: "system", content: compactSystem },
-            { role: "user", content: compactUser },
-          ],
-          temperature: 0.2,
-        });
-
-        const nextSummary = String(compactResp.choices?.[0]?.message?.content ?? "").trim();
-        
-        if (nextSummary.length) {
-          rollingSummary = nextSummary;
-
-          // Find the highest message ID that was included in compaction
-          const highestCompactedMessageId = olderHistoryMessages.reduce((highest: number | null, msg: any) => {
-            const msgId = msg.id || msg.message_id;
-            if (typeof msgId === "number") {
-              return highest !== null ? Math.max(highest, msgId) : msgId;
-            }
-            return highest;
-          }, null);
-
-          // Persist summary and compaction boundary
-          try {
-            db.prepare(`UPDATE sessions SET rolling_summary = ?, summarized_until_message_id = ? WHERE id = ? AND ${owner.column} = ?`).run(
-              rollingSummary,
-              highestCompactedMessageId,
-              sessionId,
-              owner.value
-            );
-          } catch {
-            // ignore
-          }
-
-          // Update local boundary for current request
-          summarizedUntilMessageId = highestCompactedMessageId;
-
-          // Rebuild eligible messages and recalculate budget
-          const newEligibleHistory = summarizedUntilMessageId !== null
-            ? historyMessages.filter((msg: any) => msg.id && msg.id > highestCompactedMessageId!)
-            : historyMessages;
-          
-          rawBudget = calculateRawHistoryBudget(rollingSummary);
-          const newSelection = selectRecentHistory(newEligibleHistory, rawBudget);
-          recentHistoryMessages = newSelection.recent;
-          olderHistoryMessages = newSelection.older;
-          messagesForOpenAI = buildMessages(rollingSummary, recentHistoryMessages);
-          
-        }
-        
-        compactPasses++;
-      }
-
-      // Final safety check: if still over limit, drop oldest recent messages
-      let finalTokens = estimateTokensForMessages(
-        messagesForOpenAI
-          .filter((m) => typeof m.content === "string")
-          .map((m) => ({ role: m.role, content: String(m.content) }))
-      );
-      
-      let finalRatio = CONTEXT_LIMIT_TOKENS > 0 ? finalTokens / CONTEXT_LIMIT_TOKENS : 0;
-      
-      while (finalRatio > 1.0 && recentHistoryMessages.length > 0) {
-        // Drop oldest recent message
-        recentHistoryMessages.shift();
-        messagesForOpenAI = buildMessages(rollingSummary, recentHistoryMessages);
-        finalTokens = estimateTokensForMessages(
-          messagesForOpenAI
-            .filter((m) => typeof m.content === "string")
-            .map((m) => ({ role: m.role, content: String(m.content) }))
-        );
-        finalRatio = CONTEXT_LIMIT_TOKENS > 0 ? finalTokens / CONTEXT_LIMIT_TOKENS : 0;
-      }
-    } catch {
-      // if anything fails, just continue without compaction
-    }
-
-    // Calculate context window usage (Option A: context-window pressure measurement)
-    // Convert messages to string format for estimation (ignore images for token estimate)
-    const messagesForEstimation = messagesForOpenAI.map(msg => ({
-      role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : 
-        msg.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('')
-    }));
-    
-    const contextCurrentTokens = estimateTokensForMessages(messagesForEstimation);
-    const contextMaxTokens = CONTEXT_LIMIT_TOKENS;
-    const contextUsageRatio = Math.min(contextCurrentTokens / contextMaxTokens, 1);
+    const {
+      messagesForOpenAI,
+      rollingSummary,
+      recentHistoryCount,
+      hasRollingSummary,
+      contextCurrentTokens,
+      contextMaxTokens,
+      contextUsageRatio,
+      semanticMemoryIds,
+    } = await assemblePromptMessages({
+      db,
+      openai,
+      model,
+      sessionId,
+      owner,
+      finalSystemMessageContent,
+      historyMessages,
+      historyPolicy,
+      userMessageContent,
+      webContextSystemMessage,
+      hasWebVerifiedHistory,
+      excludedSemanticMemoryIds: [...new Set([...attachedIds, ...injectedMemoryIds])],
+    });
 
     // === CONTEXT ASSEMBLY AUDIT ===
-    const auditManifest = {
+    const auditManifest = buildChatContextAuditManifest({
       sessionId,
-      mode: searchQuery ? "search" : "chat",
-      attachedMemoryIds: attachedIds, // From DB
-      injectedMemoryIds: pinnedIds, // From DB
-      clientAttachedMemoryIds: attachedMemoryIds || [], // Client claim
+      searchQuery,
+      attachedMemoryIds: attachedIds,
+      injectedMemoryIds,
+      semanticMemoryIds,
+      clientAttachedMemoryIds: attachedMemoryIds || [],
       historyPolicy,
-      recentHistoryCount: recentHistoryMessages.length,
-      hasRollingSummary: rollingSummary.trim().length > 0,
-    };
+      recentHistoryCount,
+      hasRollingSummary,
+    });
+    const auditHeaders = buildChatContextAuditHeaders({
+      mode: auditManifest.mode,
+      attachedMemoryIds: attachedIds,
+      injectedMemoryIds,
+      semanticMemoryIds,
+      clientAttachedMemoryIds: attachedMemoryIds || [],
+    });
     // Determine max_output_tokens based on mode.
     // You can override via env var DARTZ_MAX_OUTPUT_TOKENS (e.g. 4096, 8192).
     const envMax = process.env.DARTZ_MAX_OUTPUT_TOKENS
@@ -1512,12 +1166,11 @@ export async function POST(request: NextRequest) {
           async start(controller) {
             try {
               // Send context metrics in first chunk
-              const contextMetrics = {
-                type: 'context_metrics',
-                context_current_tokens: contextCurrentTokens,
-                context_max_tokens: contextMaxTokens,
-                context_usage_ratio: contextUsageRatio,
-              };
+              const contextMetrics = buildChatContextMetricsEvent({
+                contextCurrentTokens,
+                contextMaxTokens,
+                contextUsageRatio,
+              });
               controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(contextMetrics)}\n\n`));
               
               for await (const chunk of streamResponse as any) {
@@ -1540,13 +1193,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
-            // Context audit headers
-            'X-CTX-attached': JSON.stringify(attachedIds.slice(0, 50)),
-            'X-CTX-injected': JSON.stringify(pinnedIds.slice(0, 50)),
-            'X-CTX-client-attached': JSON.stringify((attachedMemoryIds || []).slice(0, 50)),
-            'X-CTX-mode': auditManifest.mode,
-            'X-CTX-attached-count': attachedIds.length.toString(),
-            'X-CTX-injected-count': pinnedIds.length.toString(),
+            ...auditHeaders,
           },
         }
       );
@@ -1650,13 +1297,7 @@ export async function POST(request: NextRequest) {
         context_usage_ratio: contextUsageRatio,
       }, {
         headers: {
-          // Context audit headers
-          'X-CTX-attached': JSON.stringify(attachedIds.slice(0, 50)),
-          'X-CTX-injected': JSON.stringify(pinnedIds.slice(0, 50)),
-          'X-CTX-client-attached': JSON.stringify((attachedMemoryIds || []).slice(0, 50)),
-          'X-CTX-mode': auditManifest.mode,
-          'X-CTX-attached-count': attachedIds.length.toString(),
-          'X-CTX-injected-count': pinnedIds.length.toString(),
+          ...auditHeaders,
         }
       });
     }

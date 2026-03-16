@@ -81,6 +81,10 @@ export function getDb(): Database.Database {
       position INTEGER,
       source TEXT DEFAULT 'dartz',
       message_created_at TEXT,
+      embedding_vector TEXT,
+      embedding_model TEXT,
+      embedding_source_hash TEXT,
+      embedding_updated_at TEXT,
       user_id TEXT,
       guest_id TEXT,
       FOREIGN KEY(folder_id) REFERENCES memory_folders(id),
@@ -267,6 +271,8 @@ export function getDb(): Database.Database {
       CREATE INDEX IF NOT EXISTS idx_archive_ts_id ON archive_messages(ts, id);
       CREATE INDEX IF NOT EXISTS idx_uploaded_images_user_created_at ON uploaded_images(user_id, created_at);
       CREATE INDEX IF NOT EXISTS idx_api_rate_limits_window_start ON api_rate_limits(window_start_ms);
+      CREATE INDEX IF NOT EXISTS idx_memories_user_created_at ON memories(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_memories_guest_created_at ON memories(guest_id, created_at DESC);
     `);
   } catch (e: any) {
     console.warn("Error creating archive_messages indexes:", e);
@@ -329,6 +335,38 @@ export function getDb(): Database.Database {
     // Column already exists, ignore error
     if (!e.message?.includes("duplicate column")) {
       console.warn("Error adding position column to memories (may already exist):", e);
+    }
+  }
+
+  try {
+    db.prepare(`ALTER TABLE memories ADD COLUMN embedding_vector TEXT`).run();
+  } catch (e: any) {
+    if (!e.message?.includes("duplicate column")) {
+      console.warn("Error adding embedding_vector column to memories (may already exist):", e);
+    }
+  }
+
+  try {
+    db.prepare(`ALTER TABLE memories ADD COLUMN embedding_model TEXT`).run();
+  } catch (e: any) {
+    if (!e.message?.includes("duplicate column")) {
+      console.warn("Error adding embedding_model column to memories (may already exist):", e);
+    }
+  }
+
+  try {
+    db.prepare(`ALTER TABLE memories ADD COLUMN embedding_source_hash TEXT`).run();
+  } catch (e: any) {
+    if (!e.message?.includes("duplicate column")) {
+      console.warn("Error adding embedding_source_hash column to memories (may already exist):", e);
+    }
+  }
+
+  try {
+    db.prepare(`ALTER TABLE memories ADD COLUMN embedding_updated_at TEXT`).run();
+  } catch (e: any) {
+    if (!e.message?.includes("duplicate column")) {
+      console.warn("Error adding embedding_updated_at column to memories (may already exist):", e);
     }
   }
 
